@@ -1,0 +1,7 @@
+build/
+dist/
+out/
+.vs/
+.vscode/
+CMakeUserPresets.json
+aqtinstall.log
