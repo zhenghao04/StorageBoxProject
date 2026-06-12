@@ -7,6 +7,7 @@
 #include <QMenu>
 #include <QPoint>
 #include <QPointer>
+#include <QSize>
 #include <QString>
 #include <QStringList>
 #include <QSystemTrayIcon>
@@ -30,6 +31,7 @@ struct Box
     QString id;
     QString name;
     QPoint position;
+    QSize size;
     QColor color;
     QList<LaunchItem> items;
 };
@@ -100,12 +102,31 @@ protected:
     void paintEvent(QPaintEvent *event) override;
 
 private:
+    enum class HitRegion
+    {
+        None,
+        Move,
+        Left,
+        Right,
+        Top,
+        Bottom,
+        TopLeft,
+        TopRight,
+        BottomLeft,
+        BottomRight,
+    };
+
     void applyWindowFlags();
+    HitRegion hitRegionAt(const QPoint &point) const;
+    void updateCursor(const QPoint &point);
+    void applyResize(const QPoint &delta);
 
     StorageBoxApp *m_app;
     Box *m_box;
     QPoint m_pressGlobal;
     QPoint m_startPosition;
+    QSize m_startSize;
+    HitRegion m_dragRegion = HitRegion::None;
     bool m_dragged = false;
 };
 
