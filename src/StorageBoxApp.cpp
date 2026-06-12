@@ -8,6 +8,7 @@
 #include <QDesktopServices>
 #include <QDrag>
 #include <QDragEnterEvent>
+#include <QDragLeaveEvent>
 #include <QDropEvent>
 #include <QDir>
 #include <QEvent>
@@ -672,15 +673,15 @@ void StorageBoxApp::clearBoxIcon(Box *box)
 void StorageBoxApp::addApp(Box *box, QWidget *parent)
 {
     if (box->items.size() >= kMaxItemsPerBox) {
-        QMessageBox::information(parent, QStringLiteral("盒子已满"), QStringLiteral("每个盒子最多收纳 9 个应用。"));
+        QMessageBox::information(parent, QStringLiteral("盒子已满"), QStringLiteral("每个盒子最多收纳 9 个项目。"));
         return;
     }
 
     const QString path = QFileDialog::getOpenFileName(
         parent,
-        QStringLiteral("选择应用或快捷方式"),
+        QStringLiteral("选择应用、文件或快捷方式"),
         QString(),
-        QStringLiteral("可启动文件 (*.exe *.lnk *.bat *.cmd *.com *.url);;所有文件 (*.*)"));
+        QStringLiteral("常用项目 (*.exe *.lnk *.url *.pdf *.doc *.docx *.xls *.xlsx *.ppt *.pptx *.txt *.md *.png *.jpg *.jpeg *.zip *.rar);;所有文件 (*.*)"));
     if (path.isEmpty()) {
         return;
     }
@@ -690,7 +691,7 @@ void StorageBoxApp::addApp(Box *box, QWidget *parent)
     QString name = QInputDialog::getText(
         parent,
         QStringLiteral("显示名称"),
-        QStringLiteral("应用名称："),
+        QStringLiteral("显示名称："),
         QLineEdit::Normal,
         defaultName,
         &ok);
@@ -699,6 +700,39 @@ void StorageBoxApp::addApp(Box *box, QWidget *parent)
     }
 
     box->items.append(LaunchItem{name.trimmed(), path});
+    renderBoxes();
+}
+
+void StorageBoxApp::addFolder(Box *box, QWidget *parent)
+{
+    if (box->items.size() >= kMaxItemsPerBox) {
+        QMessageBox::information(parent, QStringLiteral("盒子已满"), QStringLiteral("每个盒子最多收纳 9 个项目。"));
+        return;
+    }
+
+    const QString path = QFileDialog::getExistingDirectory(
+        parent,
+        QStringLiteral("选择文件夹"),
+        QString(),
+        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+    if (path.isEmpty()) {
+        return;
+    }
+
+    bool ok = false;
+    const QString defaultName = defaultNameForPath(path);
+    QString name = QInputDialog::getText(
+        parent,
+        QStringLiteral("显示名称"),
+        QStringLiteral("显示名称："),
+        QLineEdit::Normal,
+        defaultName,
+        &ok);
+    if (!ok || name.trimmed().isEmpty()) {
+        name = defaultName;
+    }
+
+    box->items.append(LaunchItem{name.trimmed(), QDir::toNativeSeparators(path)});
     renderBoxes();
 }
 
@@ -711,8 +745,8 @@ void StorageBoxApp::renameApp(Box *box, int index, QWidget *parent)
     bool ok = false;
     const QString name = QInputDialog::getText(
         parent,
-        QStringLiteral("重命名应用"),
-        QStringLiteral("应用名称："),
+        QStringLiteral("重命名项目"),
+        QStringLiteral("显示名称："),
         QLineEdit::Normal,
         box->items.at(index).name,
         &ok);
@@ -731,7 +765,7 @@ void StorageBoxApp::removeApp(Box *box, int index, QWidget *parent)
     }
 
     const QString name = box->items.at(index).name;
-    if (QMessageBox::question(parent, QStringLiteral("移除应用"), QStringLiteral("从盒子里移除「%1」吗？").arg(name)) != QMessageBox::Yes) {
+    if (QMessageBox::question(parent, QStringLiteral("移除项目"), QStringLiteral("从盒子里移除「%1」吗？").arg(name)) != QMessageBox::Yes) {
         return;
     }
 
@@ -773,7 +807,7 @@ void StorageBoxApp::addDroppedPaths(Box *box, const QStringList &paths, int inse
     }
 
     if (added == 0 && box->items.size() >= kMaxItemsPerBox) {
-        QMessageBox::information(parent, QStringLiteral("盒子已满"), QStringLiteral("每个盒子最多收纳 9 个应用。"));
+        QMessageBox::information(parent, QStringLiteral("盒子已满"), QStringLiteral("每个盒子最多收纳 9 个项目。"));
         return;
     }
 
@@ -797,7 +831,7 @@ void StorageBoxApp::moveApp(Box *box, int sourceIndex, int targetIndex)
 void StorageBoxApp::launchApp(const LaunchItem &item, QWidget *parent)
 {
     if (!QFileInfo::exists(item.path)) {
-        QMessageBox::warning(parent, QStringLiteral("无法启动"), QStringLiteral("找不到文件：\n%1").arg(item.path));
+        QMessageBox::warning(parent, QStringLiteral("无法打开"), QStringLiteral("找不到项目：\n%1").arg(item.path));
         return;
     }
 
@@ -807,11 +841,11 @@ void StorageBoxApp::launchApp(const LaunchItem &item, QWidget *parent)
     const std::wstring path = QDir::toNativeSeparators(item.path).toStdWString();
     const HINSTANCE result = ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
     if (reinterpret_cast<INT_PTR>(result) <= 32) {
-        QMessageBox::warning(parent, QStringLiteral("启动失败"), QStringLiteral("Windows 无法打开：\n%1").arg(item.path));
+        QMessageBox::warning(parent, QStringLiteral("打开失败"), QStringLiteral("Windows 无法打开：\n%1").arg(item.path));
     }
 #else
     if (!QDesktopServices::openUrl(QUrl::fromLocalFile(item.path))) {
-        QMessageBox::warning(parent, QStringLiteral("启动失败"), QStringLiteral("无法打开：\n%1").arg(item.path));
+        QMessageBox::warning(parent, QStringLiteral("打开失败"), QStringLiteral("无法打开：\n%1").arg(item.path));
     }
 #endif
 }
@@ -852,6 +886,9 @@ QColor StorageBoxApp::colorForIndex(int index) const
 QString StorageBoxApp::defaultNameForPath(const QString &path) const
 {
     const QFileInfo info(path);
+    if (info.isDir()) {
+        return info.fileName().isEmpty() ? path : info.fileName();
+    }
     return info.completeBaseName().isEmpty() ? info.fileName() : info.completeBaseName();
 }
 
@@ -927,7 +964,7 @@ BoxWindow::BoxWindow(StorageBoxApp *app, Box *box)
     setAcceptDrops(true);
     setAttribute(Qt::WA_Hover, true);
     setCursor(Qt::PointingHandCursor);
-    setToolTip(QStringLiteral("左键打开，拖动移动，拖边缩放，右键管理，双击添加应用"));
+    setToolTip(QStringLiteral("左键打开，拖动移动，拖边缩放，右键管理，双击添加文件/应用；可拖入文件、文件夹或文档"));
     applyWindowFlags();
     move(m_box->position);
 }
@@ -1042,7 +1079,9 @@ void BoxWindow::contextMenuEvent(QContextMenuEvent *event)
 {
     QMenu menu(this);
     menu.addAction(QStringLiteral("打开"), this, [this] { m_app->showPopup(this); });
-    menu.addAction(QStringLiteral("添加应用"), this, [this] { m_app->addApp(m_box, this); });
+    QMenu *addMenu = menu.addMenu(QStringLiteral("添加项目"));
+    addMenu->addAction(QStringLiteral("添加文件/应用..."), this, [this] { m_app->addApp(m_box, this); });
+    addMenu->addAction(QStringLiteral("添加文件夹..."), this, [this] { m_app->addFolder(m_box, this); });
     menu.addAction(QStringLiteral("重命名盒子"), this, [this] { m_app->renameBox(m_box, this); });
 
     QMenu *appearanceMenu = menu.addMenu(QStringLiteral("外观"));
@@ -1088,14 +1127,25 @@ void BoxWindow::contextMenuEvent(QContextMenuEvent *event)
 void BoxWindow::dragEnterEvent(QDragEnterEvent *event)
 {
     if (mimeHasLocalFiles(event->mimeData())) {
+        m_dropActive = true;
+        update();
         event->acceptProposedAction();
         return;
     }
     QWidget::dragEnterEvent(event);
 }
 
+void BoxWindow::dragLeaveEvent(QDragLeaveEvent *event)
+{
+    m_dropActive = false;
+    update();
+    QWidget::dragLeaveEvent(event);
+}
+
 void BoxWindow::dropEvent(QDropEvent *event)
 {
+    m_dropActive = false;
+    update();
     const QStringList paths = localFilesFromMime(event->mimeData());
     if (!paths.isEmpty()) {
         m_app->addDroppedPaths(m_box, paths, -1, this);
@@ -1245,8 +1295,15 @@ void BoxWindow::paintEvent(QPaintEvent *)
     painter.fillRect(outer.adjusted(1, 1, -1, -outer.height() * 0.45), sheen);
     painter.restore();
 
-    painter.setPen(QPen(QColor(255, 255, 255, m_hovered ? 230 : 178), m_hovered ? 2.0 : 1.4));
+    painter.setPen(QPen(QColor(255, 255, 255, (m_hovered || m_dropActive) ? 230 : 178), (m_hovered || m_dropActive) ? 2.0 : 1.4));
     painter.drawPath(path);
+
+    if (m_dropActive) {
+        QPen dropPen(QColor(255, 255, 255, 245), 2.2, Qt::DashLine);
+        painter.setPen(dropPen);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRoundedRect(outer.adjusted(4, 4, -4, -4), qMax(8.0, radius - 4), qMax(8.0, radius - 4));
+    }
 
     const QString countText = QStringLiteral("%1/9").arg(m_box->items.size());
     QFont countFont(QStringLiteral("Segoe UI"), qBound(6, side / 11, 9), QFont::DemiBold);
@@ -1496,8 +1553,8 @@ void BoxPopup::buildUi()
 
     auto *addButton = new QPushButton(QStringLiteral("+"), header);
     addButton->setObjectName(QStringLiteral("headerButton"));
-    addButton->setToolTip(QStringLiteral("添加应用"));
-    connect(addButton, &QPushButton::clicked, this, [this] { m_app->addApp(box(), this); });
+    addButton->setToolTip(QStringLiteral("添加文件、应用或文件夹"));
+    connect(addButton, &QPushButton::clicked, this, [this, addButton] { showAddMenu(addButton); });
     headerLayout->addWidget(addButton);
 
     auto *closeButton = new QPushButton(QStringLiteral("x"), header);
@@ -1580,18 +1637,31 @@ void BoxPopup::buildItemButton(int index)
         button->setObjectName(QStringLiteral("emptySlot"));
         button->setText(QStringLiteral("+"));
         button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+        button->setToolTip(QStringLiteral("点击添加，或把桌面文件、文件夹、文档拖到这里"));
         button->style()->unpolish(button);
         button->style()->polish(button);
-        connect(button, &QToolButton::clicked, this, [this] { m_app->addApp(box(), this); });
+        connect(button, &QToolButton::clicked, this, [this, button] { showAddMenu(button); });
     }
 
     m_grid->addWidget(button, row, col);
 }
 
+void BoxPopup::showAddMenu(QWidget *anchor)
+{
+    if (!anchor) {
+        return;
+    }
+
+    QMenu menu(this);
+    menu.addAction(QStringLiteral("添加文件/应用..."), this, [this] { m_app->addApp(box(), this); });
+    menu.addAction(QStringLiteral("添加文件夹..."), this, [this] { m_app->addFolder(box(), this); });
+    menu.exec(anchor->mapToGlobal(QPoint(0, anchor->height() + 4)));
+}
+
 void BoxPopup::showItemMenu(const QPoint &globalPos, int index)
 {
     QMenu menu(this);
-    menu.addAction(QStringLiteral("启动"), this, [this, index] { m_app->launchApp(box()->items.at(index), this); });
+    menu.addAction(QStringLiteral("打开"), this, [this, index] { m_app->launchApp(box()->items.at(index), this); });
     menu.addAction(QStringLiteral("重命名"), this, [this, index] { m_app->renameApp(box(), index, this); });
     menu.addAction(QStringLiteral("移除"), this, [this, index] { m_app->removeApp(box(), index, this); });
     menu.exec(globalPos);

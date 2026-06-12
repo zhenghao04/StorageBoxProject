@@ -14,6 +14,7 @@
 #include <QWidget>
 
 class QDragEnterEvent;
+class QDragLeaveEvent;
 class QDropEvent;
 class QEvent;
 class QGridLayout;
@@ -59,6 +60,7 @@ public:
     void chooseBoxIcon(Box *box, QWidget *parent);
     void clearBoxIcon(Box *box);
     void addApp(Box *box, QWidget *parent);
+    void addFolder(Box *box, QWidget *parent);
     void renameApp(Box *box, int index, QWidget *parent);
     void removeApp(Box *box, int index, QWidget *parent);
     void addDroppedPaths(Box *box, const QStringList &paths, int insertIndex, QWidget *parent);
@@ -108,6 +110,7 @@ protected:
     void mouseDoubleClickEvent(QMouseEvent *event) override;
     void contextMenuEvent(QContextMenuEvent *event) override;
     void dragEnterEvent(QDragEnterEvent *event) override;
+    void dragLeaveEvent(QDragLeaveEvent *event) override;
     void dropEvent(QDropEvent *event) override;
     void paintEvent(QPaintEvent *event) override;
 
@@ -139,6 +142,7 @@ private:
     HitRegion m_dragRegion = HitRegion::None;
     bool m_dragged = false;
     bool m_hovered = false;
+    bool m_dropActive = false;
 };
 
 class BoxPopup : public QWidget
@@ -161,6 +165,7 @@ private:
     void updateHeader();
     void rebuildGrid();
     void buildItemButton(int index);
+    void showAddMenu(QWidget *anchor);
     void showItemMenu(const QPoint &globalPos, int index);
     void applyWindowFlags();
 
