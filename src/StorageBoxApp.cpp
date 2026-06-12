@@ -3,17 +3,21 @@
 #include <QAction>
 #include <QApplication>
 #include <QContextMenuEvent>
+#include <QColorDialog>
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QDrag>
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QDir>
+#include <QEvent>
 #include <QFile>
 #include <QFileDialog>
 #include <QFileIconProvider>
 #include <QFileInfo>
 #include <QFont>
+#include <QFrame>
+#include <QGraphicsDropShadowEffect>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QIcon>
@@ -22,6 +26,7 @@
 #include <QJsonDocument>
 #include <QLabel>
 #include <QLineEdit>
+#include <QLinearGradient>
 #include <QMessageBox>
 #include <QMimeData>
 #include <QMouseEvent>
@@ -31,12 +36,14 @@
 #include <QPushButton>
 #include <QRandomGenerator>
 #include <QSize>
+#include <QSizePolicy>
 #include <QStandardPaths>
 #include <QStyle>
 #include <QTimer>
 #include <QToolButton>
 #include <QUrl>
 #include <QVBoxLayout>
+#include <QWidget>
 #include <QtGlobal>
 
 #ifdef Q_OS_WIN
@@ -221,6 +228,107 @@ QString elide(const QString &text, int maxChars)
     }
     return text.left(maxChars - 1) + QStringLiteral("…");
 }
+
+QIcon colorSwatchIcon(const QColor &color)
+{
+    QPixmap pixmap(20, 20);
+    pixmap.fill(Qt::transparent);
+
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setBrush(color);
+    painter.setPen(QPen(QColor(15, 23, 42, 50), 1));
+    painter.drawRoundedRect(QRectF(2, 2, 16, 16), 5, 5);
+    return QIcon(pixmap);
+}
+
+const QList<QPair<QString, QColor>> &boxColorThemes()
+{
+    static const QList<QPair<QString, QColor>> themes = {
+        {QStringLiteral("海蓝"), QColor(QStringLiteral("#2563eb"))},
+        {QStringLiteral("松绿"), QColor(QStringLiteral("#059669"))},
+        {QStringLiteral("琥珀"), QColor(QStringLiteral("#d97706"))},
+        {QStringLiteral("紫藤"), QColor(QStringLiteral("#7c3aed"))},
+        {QStringLiteral("玫红"), QColor(QStringLiteral("#db2777"))},
+        {QStringLiteral("青色"), QColor(QStringLiteral("#0891b2"))},
+        {QStringLiteral("石墨"), QColor(QStringLiteral("#475569"))},
+    };
+    return themes;
+}
+
+QPixmap scaledCoverPixmap(const QPixmap &source, const QSize &targetSize)
+{
+    if (source.isNull() || targetSize.isEmpty()) {
+        return {};
+    }
+    return source.scaled(targetSize, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
+}
+
+void drawRoundedPixmap(QPainter &painter, const QPixmap &source, const QRectF &rect, qreal radius)
+{
+    const QPixmap scaled = scaledCoverPixmap(source, rect.size().toSize());
+    if (scaled.isNull()) {
+        return;
+    }
+
+    QPainterPath clipPath;
+    clipPath.addRoundedRect(rect, radius, radius);
+
+    painter.save();
+    painter.setClipPath(clipPath);
+    const QPointF topLeft(
+        rect.center().x() - scaled.width() / 2.0,
+        rect.center().y() - scaled.height() / 2.0);
+    painter.drawPixmap(topLeft, scaled);
+    painter.restore();
+}
+
+QPixmap customBoxIconPixmap(const Box *box, const QSize &targetSize)
+{
+    if (!box || box->iconPath.isEmpty()) {
+        return {};
+    }
+
+    const QPixmap pixmap(box->iconPath);
+    if (pixmap.isNull()) {
+        return {};
+    }
+    return scaledCoverPixmap(pixmap, targetSize);
+}
+
+QPixmap boxPreviewPixmap(const Box *box, const QSize &targetSize)
+{
+    QPixmap pixmap(targetSize);
+    pixmap.fill(Qt::transparent);
+
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing);
+    const QRectF rect(0, 0, targetSize.width(), targetSize.height());
+    const qreal radius = qMin(targetSize.width(), targetSize.height()) / 4.0;
+
+    const QPixmap customIcon = customBoxIconPixmap(box, targetSize);
+    if (!customIcon.isNull()) {
+        drawRoundedPixmap(painter, customIcon, rect, radius);
+        painter.setPen(QPen(QColor(255, 255, 255, 190), 1));
+        painter.drawRoundedRect(rect.adjusted(0.5, 0.5, -0.5, -0.5), radius, radius);
+        return pixmap;
+    }
+
+    const QColor base = box ? box->color : QColor(QStringLiteral("#2563eb"));
+    QLinearGradient gradient(rect.topLeft(), rect.bottomRight());
+    gradient.setColorAt(0.0, base.lighter(128));
+    gradient.setColorAt(0.58, base);
+    gradient.setColorAt(1.0, base.darker(126));
+    painter.setBrush(gradient);
+    painter.setPen(QPen(QColor(255, 255, 255, 150), 1));
+    painter.drawRoundedRect(rect.adjusted(0.5, 0.5, -0.5, -0.5), radius, radius);
+
+    painter.setPen(Qt::white);
+    QFont font(QStringLiteral("Microsoft YaHei UI"), qMax(10, targetSize.height() / 3), QFont::DemiBold);
+    painter.setFont(font);
+    painter.drawText(rect, Qt::AlignCenter, box && !box->name.isEmpty() ? box->name.left(1).toUpper() : QStringLiteral("S"));
+    return pixmap;
+}
 }
 
 StorageBoxApp::StorageBoxApp(QObject *parent)
@@ -277,6 +385,7 @@ void StorageBoxApp::ensureDefaults()
         QPoint(96, 160),
         QSize(kBoxSize, kBoxSize),
         QColor(QStringLiteral("#2563eb")),
+        QString(),
         {},
     });
 }
@@ -367,6 +476,52 @@ QString StorageBoxApp::configFilePath() const
     return QDir(base).filePath(QStringLiteral("config.json"));
 }
 
+QString StorageBoxApp::iconStorageDirPath() const
+{
+    const QFileInfo configInfo(configFilePath());
+    return QDir(configInfo.absolutePath()).filePath(QStringLiteral("Icons"));
+}
+
+QString StorageBoxApp::copyIconToStorage(const QString &sourcePath, const QString &boxId) const
+{
+    const QImage image(sourcePath);
+    if (image.isNull()) {
+        return {};
+    }
+
+    const QFileInfo sourceInfo(sourcePath);
+    QString suffix = sourceInfo.suffix().toLower();
+    if (suffix.isEmpty() || suffix.size() > 8) {
+        suffix = QStringLiteral("png");
+    }
+
+    QDir iconDir(iconStorageDirPath());
+    if (!iconDir.exists() && !QDir().mkpath(iconDir.absolutePath())) {
+        return {};
+    }
+
+    const QString safeId = boxId.isEmpty() ? makeId() : boxId;
+    const QString targetPath = iconDir.filePath(QStringLiteral("%1.%2").arg(safeId, suffix));
+    const QString sourceAbs = QFileInfo(sourcePath).absoluteFilePath();
+    const QString targetAbs = QFileInfo(targetPath).absoluteFilePath();
+    if (QString::compare(sourceAbs, targetAbs, Qt::CaseInsensitive) == 0) {
+        return QDir::toNativeSeparators(targetPath);
+    }
+
+    QFile::remove(targetPath);
+    if (QFile::copy(sourcePath, targetPath)) {
+        return QDir::toNativeSeparators(targetPath);
+    }
+
+    const QString pngTargetPath = iconDir.filePath(QStringLiteral("%1.png").arg(safeId));
+    QFile::remove(pngTargetPath);
+    if (image.save(pngTargetPath, "PNG")) {
+        return QDir::toNativeSeparators(pngTargetPath);
+    }
+
+    return {};
+}
+
 void StorageBoxApp::showPopup(BoxWindow *window)
 {
     if (m_popup && m_popup->box() == window->box()) {
@@ -415,6 +570,7 @@ void StorageBoxApp::addBox()
         QPoint(96 + offset, 160 + offset),
         QSize(kBoxSize, kBoxSize),
         colorForIndex(count - 1),
+        QString(),
         {},
     });
     renderBoxes();
@@ -453,6 +609,64 @@ void StorageBoxApp::deleteBox(Box *box, QWidget *parent)
         m_boxes.removeAt(index);
         renderBoxes();
     }
+}
+
+void StorageBoxApp::setBoxColor(Box *box, const QColor &color)
+{
+    if (!box || !color.isValid()) {
+        return;
+    }
+
+    box->color = color;
+    refreshViews(box);
+}
+
+void StorageBoxApp::chooseBoxColor(Box *box, QWidget *parent)
+{
+    if (!box) {
+        return;
+    }
+
+    const QColor color = QColorDialog::getColor(
+        box->color,
+        parent,
+        QStringLiteral("选择盒子颜色"));
+    setBoxColor(box, color);
+}
+
+void StorageBoxApp::chooseBoxIcon(Box *box, QWidget *parent)
+{
+    if (!box) {
+        return;
+    }
+
+    const QString path = QFileDialog::getOpenFileName(
+        parent,
+        QStringLiteral("选择盒子图标图片"),
+        QString(),
+        QStringLiteral("图片文件 (*.png *.jpg *.jpeg *.bmp *.ico *.webp);;所有文件 (*.*)"));
+    if (path.isEmpty()) {
+        return;
+    }
+
+    const QString storedPath = copyIconToStorage(path, box->id);
+    if (storedPath.isEmpty()) {
+        QMessageBox::warning(parent, QStringLiteral("图标不可用"), QStringLiteral("无法读取或保存这张图片。"));
+        return;
+    }
+
+    box->iconPath = storedPath;
+    refreshViews(box);
+}
+
+void StorageBoxApp::clearBoxIcon(Box *box)
+{
+    if (!box || box->iconPath.isEmpty()) {
+        return;
+    }
+
+    box->iconPath.clear();
+    refreshViews(box);
 }
 
 void StorageBoxApp::addApp(Box *box, QWidget *parent)
@@ -631,15 +845,8 @@ int StorageBoxApp::boxIndex(Box *box) const
 
 QColor StorageBoxApp::colorForIndex(int index) const
 {
-    static const QList<QColor> colors = {
-        QColor(QStringLiteral("#2563eb")),
-        QColor(QStringLiteral("#059669")),
-        QColor(QStringLiteral("#d97706")),
-        QColor(QStringLiteral("#7c3aed")),
-        QColor(QStringLiteral("#dc2626")),
-        QColor(QStringLiteral("#0891b2")),
-    };
-    return colors.at(index % colors.size());
+    const auto &themes = boxColorThemes();
+    return themes.at(index % themes.size()).second;
 }
 
 QString StorageBoxApp::defaultNameForPath(const QString &path) const
@@ -666,6 +873,7 @@ QJsonObject StorageBoxApp::boxToJson(const Box &box) const
     object.insert(QStringLiteral("width"), box.size.width());
     object.insert(QStringLiteral("height"), box.size.height());
     object.insert(QStringLiteral("color"), box.color.name());
+    object.insert(QStringLiteral("iconPath"), box.iconPath);
 
     QJsonArray items;
     for (const LaunchItem &item : box.items) {
@@ -694,6 +902,10 @@ Box StorageBoxApp::boxFromJson(const QJsonObject &json, int index) const
         qBound(kMinBoxSize, json.value(QStringLiteral("width")).toInt(kBoxSize), kMaxBoxSize),
         qBound(kMinBoxSize, json.value(QStringLiteral("height")).toInt(kBoxSize), kMaxBoxSize));
     box.color = QColor(json.value(QStringLiteral("color")).toString(colorForIndex(index).name()));
+    if (!box.color.isValid()) {
+        box.color = colorForIndex(index);
+    }
+    box.iconPath = json.value(QStringLiteral("iconPath")).toString();
 
     const QJsonArray items = json.value(QStringLiteral("items")).toArray();
     for (int i = 0; i < items.size() && box.items.size() < kMaxItemsPerBox; ++i) {
@@ -713,6 +925,7 @@ BoxWindow::BoxWindow(StorageBoxApp *app, Box *box)
     resize(m_box->size);
     setWindowIcon(QApplication::windowIcon());
     setAcceptDrops(true);
+    setAttribute(Qt::WA_Hover, true);
     setCursor(Qt::PointingHandCursor);
     setToolTip(QStringLiteral("左键打开，拖动移动，拖边缩放，右键管理，双击添加应用"));
     applyWindowFlags();
@@ -750,6 +963,18 @@ void BoxWindow::applyWindowFlags()
     }
     setWindowFlags(flags);
     setAttribute(Qt::WA_TranslucentBackground, true);
+}
+
+bool BoxWindow::event(QEvent *event)
+{
+    if (event->type() == QEvent::Enter || event->type() == QEvent::HoverEnter) {
+        m_hovered = true;
+        update();
+    } else if (event->type() == QEvent::Leave || event->type() == QEvent::HoverLeave) {
+        m_hovered = false;
+        update();
+    }
+    return QWidget::event(event);
 }
 
 void BoxWindow::mousePressEvent(QMouseEvent *event)
@@ -819,6 +1044,30 @@ void BoxWindow::contextMenuEvent(QContextMenuEvent *event)
     menu.addAction(QStringLiteral("打开"), this, [this] { m_app->showPopup(this); });
     menu.addAction(QStringLiteral("添加应用"), this, [this] { m_app->addApp(m_box, this); });
     menu.addAction(QStringLiteral("重命名盒子"), this, [this] { m_app->renameBox(m_box, this); });
+
+    QMenu *appearanceMenu = menu.addMenu(QStringLiteral("外观"));
+    QMenu *colorMenu = appearanceMenu->addMenu(QStringLiteral("颜色主题"));
+    for (const auto &theme : boxColorThemes()) {
+        QAction *action = colorMenu->addAction(colorSwatchIcon(theme.second), theme.first);
+        action->setCheckable(true);
+        action->setChecked(QString::compare(m_box->color.name(), theme.second.name(), Qt::CaseInsensitive) == 0);
+        connect(action, &QAction::triggered, this, [this, color = theme.second] {
+            m_app->setBoxColor(m_box, color);
+        });
+    }
+    colorMenu->addSeparator();
+    colorMenu->addAction(QStringLiteral("自定义颜色..."), this, [this] {
+        m_app->chooseBoxColor(m_box, this);
+    });
+
+    appearanceMenu->addSeparator();
+    appearanceMenu->addAction(QStringLiteral("选择图片图标..."), this, [this] {
+        m_app->chooseBoxIcon(m_box, this);
+    });
+    QAction *clearIcon = appearanceMenu->addAction(QStringLiteral("清除图片图标"), this, [this] {
+        m_app->clearBoxIcon(m_box);
+    });
+    clearIcon->setEnabled(!m_box->iconPath.isEmpty());
     menu.addSeparator();
 
     QAction *topmost = menu.addAction(QStringLiteral("置顶显示"));
@@ -970,51 +1219,109 @@ void BoxWindow::paintEvent(QPaintEvent *)
     painter.setRenderHint(QPainter::Antialiasing);
 
     const int side = qMin(width(), height());
-    QRectF outer(2, 2, width() - 4, height() - 4);
+    const qreal radius = qBound(12.0, side / 4.3, 26.0);
+
+    const QRectF shadowRect(5, 7, width() - 10, height() - 12);
+    QPainterPath shadowPath;
+    shadowPath.addRoundedRect(shadowRect, radius + 2, radius + 2);
+    painter.fillPath(shadowPath, QColor(15, 23, 42, m_hovered ? 70 : 44));
+
+    const QRectF outer(4, 3, width() - 8, height() - 10);
     QPainterPath path;
-    const qreal radius = qBound(10.0, side / 5.0, 24.0);
     path.addRoundedRect(outer, radius, radius);
 
-    painter.fillPath(path, m_box->color);
-    painter.setPen(QPen(QColor(255, 255, 255, 220), 2));
+    const QColor base = m_hovered ? m_box->color.lighter(112) : m_box->color;
+    QLinearGradient background(outer.topLeft(), outer.bottomRight());
+    background.setColorAt(0.0, base.lighter(132));
+    background.setColorAt(0.5, base);
+    background.setColorAt(1.0, base.darker(126));
+    painter.fillPath(path, background);
+
+    QLinearGradient sheen(outer.topLeft(), QPointF(outer.left(), outer.center().y()));
+    sheen.setColorAt(0.0, QColor(255, 255, 255, m_hovered ? 76 : 54));
+    sheen.setColorAt(1.0, QColor(255, 255, 255, 0));
+    painter.save();
+    painter.setClipPath(path);
+    painter.fillRect(outer.adjusted(1, 1, -1, -outer.height() * 0.45), sheen);
+    painter.restore();
+
+    painter.setPen(QPen(QColor(255, 255, 255, m_hovered ? 230 : 178), m_hovered ? 2.0 : 1.4));
     painter.drawPath(path);
 
-    painter.setPen(Qt::white);
-    QFont nameFont(QStringLiteral("Microsoft YaHei UI"), 9, QFont::DemiBold);
-    nameFont.setPointSize(qBound(7, side / 8, 12));
-    painter.setFont(nameFont);
-    painter.drawText(
-        QRect(8, qMax(6, height() / 9), width() - 16, qMax(18, height() / 3)),
-        Qt::AlignCenter | Qt::TextWordWrap,
-        elide(m_box->name, qBound(6, width() / 10, 14)));
-
-    QFont countFont(QStringLiteral("Segoe UI"), 11, QFont::Bold);
-    countFont.setPointSize(qBound(9, side / 7, 18));
+    const QString countText = QStringLiteral("%1/9").arg(m_box->items.size());
+    QFont countFont(QStringLiteral("Segoe UI"), qBound(6, side / 11, 9), QFont::DemiBold);
     painter.setFont(countFont);
-    painter.drawText(
-        QRect(0, height() / 2, width(), qMax(18, height() / 4)),
-        Qt::AlignCenter,
-        QStringLiteral("%1/9").arg(m_box->items.size()));
-
-    const qreal spacing = qMax(7.0, side / 6.0);
-    const qreal dotRadius = qBound(1.8, side / 34.0, 4.0);
-    const QPointF dotCenter(width() / 2.0, height() * 0.76);
+    const QFontMetrics countMetrics(countFont);
+    const int pillHeight = qBound(15, side / 5, 22);
+    const int pillWidth = qMax(countMetrics.horizontalAdvance(countText) + 12, pillHeight + 8);
+    const QRectF pillRect(outer.right() - pillWidth - 7, outer.top() + 7, pillWidth, pillHeight);
     painter.setPen(Qt::NoPen);
-    for (int i = 0; i < kMaxItemsPerBox; ++i) {
-        const int row = i / 3;
-        const int col = i % 3;
-        painter.setBrush(i < m_box->items.size() ? QColor("#ffffff") : QColor(255, 255, 255, 90));
-        painter.drawEllipse(
-            QPointF(dotCenter.x() + (col - 1) * spacing, dotCenter.y() + (row - 1) * spacing * 0.55),
-            dotRadius,
-            dotRadius);
+    painter.setBrush(QColor(15, 23, 42, 54));
+    painter.drawRoundedRect(pillRect, pillHeight / 2.0, pillHeight / 2.0);
+    painter.setPen(QColor(255, 255, 255, 230));
+    painter.drawText(pillRect, Qt::AlignCenter, countText);
+
+    const QPixmap customIcon = customBoxIconPixmap(m_box, QSize(qMax(1, width()), qMax(1, height())));
+    if (!customIcon.isNull()) {
+        const qreal iconSide = qBound(
+            24.0,
+            qMin(width() * 0.48, height() * 0.44),
+            72.0);
+        const QRectF iconRect(
+            (width() - iconSide) / 2.0,
+            qMax(18.0, height() * 0.47 - iconSide / 2.0),
+            iconSide,
+            iconSide);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(255, 255, 255, 60));
+        painter.drawRoundedRect(iconRect.adjusted(-4, -4, 4, 4), iconSide / 4.0 + 4, iconSide / 4.0 + 4);
+        drawRoundedPixmap(painter, customIcon, iconRect, iconSide / 4.0);
+    } else {
+        const qreal gridSide = qBound(
+            25.0,
+            qMin(width() * 0.43, height() * 0.38),
+            60.0);
+        const QRectF gridRect(
+            (width() - gridSide) / 2.0,
+            qMax(21.0, height() * 0.48 - gridSide / 2.0),
+            gridSide,
+            gridSide);
+        const qreal gap = qMax(2.0, gridSide / 12.0);
+        const qreal cell = (gridSide - gap * 2) / 3.0;
+        painter.setPen(Qt::NoPen);
+        for (int i = 0; i < kMaxItemsPerBox; ++i) {
+            const int row = i / 3;
+            const int col = i % 3;
+            const QRectF slot(
+                gridRect.left() + col * (cell + gap),
+                gridRect.top() + row * (cell + gap),
+                cell,
+                cell);
+            painter.setBrush(i < m_box->items.size() ? QColor(255, 255, 255, 230) : QColor(255, 255, 255, 86));
+            painter.drawRoundedRect(slot, qMax(2.0, cell / 4.0), qMax(2.0, cell / 4.0));
+        }
+    }
+
+    QFont nameFont(QStringLiteral("Microsoft YaHei UI"), qBound(7, side / 9, 11), QFont::DemiBold);
+    painter.setFont(nameFont);
+    painter.setPen(Qt::white);
+    const int titleHeight = qBound(17, side / 4, 26);
+    const QRect titleRect(9, height() - titleHeight - 9, width() - 18, titleHeight);
+    const QString titleText = QFontMetrics(nameFont).elidedText(m_box->name, Qt::ElideRight, titleRect.width());
+    painter.drawText(titleRect, Qt::AlignCenter, titleText);
+
+    if (m_hovered) {
+        painter.setPen(QPen(QColor(255, 255, 255, 125), 1));
+        const QPointF corner(outer.right() - 8, outer.bottom() - 8);
+        painter.drawLine(corner + QPointF(-8, 8), corner + QPointF(8, -8));
+        painter.drawLine(corner + QPointF(-3, 8), corner + QPointF(8, -3));
     }
 }
 
 BoxPopup::BoxPopup(StorageBoxApp *app, BoxWindow *boxWindow)
     : QWidget(nullptr), m_app(app), m_boxWindow(boxWindow)
 {
-    setFixedSize(kCellWidth * 3 + 24, kCellHeight * 3 + 62);
+    setFixedSize(kCellWidth * 3 + 48, kCellHeight * 3 + 96);
     setWindowIcon(QApplication::windowIcon());
     setAcceptDrops(true);
     applyWindowFlags();
@@ -1031,6 +1338,7 @@ void BoxPopup::refresh()
 {
     applyWindowFlags();
     move(box()->position + QPoint(0, box()->size.height() + 8));
+    updateHeader();
     rebuildGrid();
     update();
     show();
@@ -1125,52 +1433,106 @@ void BoxPopup::applyWindowFlags()
     }
     setWindowFlags(flags);
     setAttribute(Qt::WA_StyledBackground, true);
+    setAttribute(Qt::WA_TranslucentBackground, true);
     setStyleSheet(QStringLiteral(
-        "BoxPopup { background: #f8fafc; border: 1px solid #cbd5e1; }"
-        "QToolButton { border-radius: 7px; border: 1px solid #d1d5db; background: white; color: #111827; padding: 5px; }"
-        "QToolButton:hover { background: #dbeafe; border-color: #60a5fa; }"
-        "QToolButton#emptySlot { background: #e5e7eb; color: #374151; font-size: 22px; font-weight: 700; }"
-        "QToolButton#emptySlot:hover { background: #d1d5db; }"));
+        "BoxPopup { background: transparent; }"
+        "QFrame#popupPanel { background: rgba(248, 250, 252, 242); border: 1px solid rgba(148, 163, 184, 150); border-radius: 18px; }"
+        "QLabel#popupTitle { color: #0f172a; font-size: 14px; font-weight: 700; }"
+        "QLabel#popupCount { color: #64748b; font-size: 11px; }"
+        "QPushButton#headerButton { min-width: 30px; max-width: 30px; min-height: 30px; max-height: 30px; border: 0; border-radius: 15px; background: #e2e8f0; color: #0f172a; font-size: 16px; font-weight: 700; }"
+        "QPushButton#headerButton:hover { background: #cbd5e1; }"
+        "QToolButton { border-radius: 12px; border: 1px solid rgba(203, 213, 225, 210); background: rgba(255, 255, 255, 235); color: #111827; padding: 5px; }"
+        "QToolButton:hover { background: #eff6ff; border-color: #60a5fa; }"
+        "QToolButton:pressed { background: #dbeafe; }"
+        "QToolButton#emptySlot { border: 1px dashed #94a3b8; background: rgba(241, 245, 249, 205); color: #64748b; font-size: 24px; font-weight: 600; }"
+        "QToolButton#emptySlot:hover { background: #e2e8f0; border-color: #64748b; color: #334155; }"));
 }
 
 void BoxPopup::buildUi()
 {
     auto *root = new QVBoxLayout(this);
-    root->setContentsMargins(0, 0, 0, 8);
-    root->setSpacing(8);
+    root->setContentsMargins(12, 12, 12, 14);
+    root->setSpacing(0);
 
-    auto *header = new QWidget(this);
+    auto *panel = new QFrame(this);
+    panel->setObjectName(QStringLiteral("popupPanel"));
+    auto *shadow = new QGraphicsDropShadowEffect(panel);
+    shadow->setBlurRadius(28);
+    shadow->setColor(QColor(15, 23, 42, 72));
+    shadow->setOffset(0, 9);
+    panel->setGraphicsEffect(shadow);
+    root->addWidget(panel);
+
+    auto *panelLayout = new QVBoxLayout(panel);
+    panelLayout->setContentsMargins(12, 10, 12, 12);
+    panelLayout->setSpacing(10);
+
+    auto *header = new QWidget(panel);
     header->setFixedHeight(42);
-    header->setStyleSheet(QStringLiteral("background: #111827;"));
 
     auto *headerLayout = new QHBoxLayout(header);
-    headerLayout->setContentsMargins(12, 5, 6, 5);
+    headerLayout->setContentsMargins(0, 0, 0, 0);
+    headerLayout->setSpacing(8);
 
-    auto *title = new QLabel(box()->name, header);
-    title->setStyleSheet(QStringLiteral("color: white; font-weight: 700;"));
-    headerLayout->addWidget(title, 1);
+    m_iconLabel = new QLabel(header);
+    m_iconLabel->setFixedSize(34, 34);
+    m_iconLabel->setScaledContents(true);
+    headerLayout->addWidget(m_iconLabel);
+
+    auto *titleStack = new QWidget(header);
+    auto *titleLayout = new QVBoxLayout(titleStack);
+    titleLayout->setContentsMargins(0, 0, 0, 0);
+    titleLayout->setSpacing(1);
+
+    m_titleLabel = new QLabel(header);
+    m_titleLabel->setObjectName(QStringLiteral("popupTitle"));
+    m_titleLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    titleLayout->addWidget(m_titleLabel);
+
+    m_countLabel = new QLabel(header);
+    m_countLabel->setObjectName(QStringLiteral("popupCount"));
+    titleLayout->addWidget(m_countLabel);
+    headerLayout->addWidget(titleStack, 1);
 
     auto *addButton = new QPushButton(QStringLiteral("+"), header);
-    addButton->setFixedWidth(34);
-    addButton->setStyleSheet(QStringLiteral("background: #1f2937; color: white; border: 0; font-size: 18px; font-weight: 700;"));
+    addButton->setObjectName(QStringLiteral("headerButton"));
+    addButton->setToolTip(QStringLiteral("添加应用"));
     connect(addButton, &QPushButton::clicked, this, [this] { m_app->addApp(box(), this); });
     headerLayout->addWidget(addButton);
 
     auto *closeButton = new QPushButton(QStringLiteral("x"), header);
-    closeButton->setFixedWidth(34);
-    closeButton->setStyleSheet(QStringLiteral("background: #1f2937; color: white; border: 0; font-weight: 700;"));
+    closeButton->setObjectName(QStringLiteral("headerButton"));
+    closeButton->setToolTip(QStringLiteral("关闭"));
     connect(closeButton, &QPushButton::clicked, m_app, &StorageBoxApp::closePopup);
     headerLayout->addWidget(closeButton);
 
-    root->addWidget(header);
+    panelLayout->addWidget(header);
 
     m_grid = new QGridLayout;
-    m_grid->setContentsMargins(8, 0, 8, 0);
-    m_grid->setSpacing(6);
-    root->addLayout(m_grid);
+    m_grid->setContentsMargins(0, 0, 0, 0);
+    m_grid->setSpacing(7);
+    panelLayout->addLayout(m_grid);
+
+    updateHeader();
 
     for (int index = 0; index < kMaxItemsPerBox; ++index) {
         buildItemButton(index);
+    }
+}
+
+void BoxPopup::updateHeader()
+{
+    if (m_iconLabel) {
+        m_iconLabel->setPixmap(boxPreviewPixmap(box(), QSize(34, 34)));
+    }
+
+    if (m_titleLabel) {
+        QFontMetrics metrics(m_titleLabel->font());
+        m_titleLabel->setText(metrics.elidedText(box()->name, Qt::ElideRight, 220));
+    }
+
+    if (m_countLabel) {
+        m_countLabel->setText(QStringLiteral("%1/9").arg(box()->items.size()));
     }
 }
 
@@ -1200,8 +1562,9 @@ void BoxPopup::buildItemButton(int index)
     const bool occupied = index < box()->items.size();
     auto *button = new SlotButton(this, index, occupied, this);
     button->setFixedSize(kCellWidth, kCellHeight);
+    button->setCursor(Qt::PointingHandCursor);
     button->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
-    button->setIconSize(QSize(34, 34));
+    button->setIconSize(QSize(36, 36));
 
     if (occupied) {
         const LaunchItem item = box()->items.at(index);
@@ -1217,6 +1580,8 @@ void BoxPopup::buildItemButton(int index)
         button->setObjectName(QStringLiteral("emptySlot"));
         button->setText(QStringLiteral("+"));
         button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+        button->style()->unpolish(button);
+        button->style()->polish(button);
         connect(button, &QToolButton::clicked, this, [this] { m_app->addApp(box(), this); });
     }
 

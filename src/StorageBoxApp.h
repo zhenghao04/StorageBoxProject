@@ -15,7 +15,9 @@
 
 class QDragEnterEvent;
 class QDropEvent;
+class QEvent;
 class QGridLayout;
+class QLabel;
 class QMimeData;
 class BoxPopup;
 class BoxWindow;
@@ -33,6 +35,7 @@ struct Box
     QPoint position;
     QSize size;
     QColor color;
+    QString iconPath;
     QList<LaunchItem> items;
 };
 
@@ -51,6 +54,10 @@ public:
     void addBox();
     void renameBox(Box *box, QWidget *parent);
     void deleteBox(Box *box, QWidget *parent);
+    void setBoxColor(Box *box, const QColor &color);
+    void chooseBoxColor(Box *box, QWidget *parent);
+    void chooseBoxIcon(Box *box, QWidget *parent);
+    void clearBoxIcon(Box *box);
     void addApp(Box *box, QWidget *parent);
     void renameApp(Box *box, int index, QWidget *parent);
     void removeApp(Box *box, int index, QWidget *parent);
@@ -68,6 +75,8 @@ private:
     void refreshViews(Box *box = nullptr);
     void setupTray();
     QString configFilePath() const;
+    QString iconStorageDirPath() const;
+    QString copyIconToStorage(const QString &sourcePath, const QString &boxId) const;
     QColor colorForIndex(int index) const;
     QString defaultNameForPath(const QString &path) const;
     QJsonObject itemToJson(const LaunchItem &item) const;
@@ -92,6 +101,7 @@ public:
     void refresh();
 
 protected:
+    bool event(QEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
@@ -128,6 +138,7 @@ private:
     QSize m_startSize;
     HitRegion m_dragRegion = HitRegion::None;
     bool m_dragged = false;
+    bool m_hovered = false;
 };
 
 class BoxPopup : public QWidget
@@ -147,6 +158,7 @@ protected:
 
 private:
     void buildUi();
+    void updateHeader();
     void rebuildGrid();
     void buildItemButton(int index);
     void showItemMenu(const QPoint &globalPos, int index);
@@ -155,4 +167,7 @@ private:
     StorageBoxApp *m_app;
     BoxWindow *m_boxWindow;
     QGridLayout *m_grid = nullptr;
+    QLabel *m_iconLabel = nullptr;
+    QLabel *m_titleLabel = nullptr;
+    QLabel *m_countLabel = nullptr;
 };
