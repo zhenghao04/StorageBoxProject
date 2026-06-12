@@ -47,6 +47,9 @@
 namespace {
 constexpr int kMaxItemsPerBox = 9;
 constexpr int kBoxSize = 78;
+constexpr int kMinBoxSize = 58;
+constexpr int kMaxBoxSize = 180;
+constexpr int kResizeGrip = 7;
 constexpr int kCellWidth = 116;
 constexpr int kCellHeight = 78;
 constexpr const char *kItemIndexMime = "application/x-storagebox-item-index";
@@ -272,6 +275,7 @@ void StorageBoxApp::ensureDefaults()
         makeId(),
         QStringLiteral("收纳盒 1"),
         QPoint(96, 160),
+        QSize(kBoxSize, kBoxSize),
         QColor(QStringLiteral("#2563eb")),
         {},
     });
@@ -409,6 +413,7 @@ void StorageBoxApp::addBox()
         makeId(),
         name.trimmed().isEmpty() ? QStringLiteral("收纳盒 %1").arg(count) : name.trimmed(),
         QPoint(96 + offset, 160 + offset),
+        QSize(kBoxSize, kBoxSize),
         colorForIndex(count - 1),
         {},
     });
@@ -658,6 +663,8 @@ QJsonObject StorageBoxApp::boxToJson(const Box &box) const
     object.insert(QStringLiteral("name"), box.name);
     object.insert(QStringLiteral("x"), box.position.x());
     object.insert(QStringLiteral("y"), box.position.y());
+    object.insert(QStringLiteral("width"), box.size.width());
+    object.insert(QStringLiteral("height"), box.size.height());
     object.insert(QStringLiteral("color"), box.color.name());
 
     QJsonArray items;
@@ -683,6 +690,9 @@ Box StorageBoxApp::boxFromJson(const QJsonObject &json, int index) const
     box.id = json.value(QStringLiteral("id")).toString(makeId());
     box.name = json.value(QStringLiteral("name")).toString(QStringLiteral("收纳盒 %1").arg(index + 1));
     box.position = QPoint(json.value(QStringLiteral("x")).toInt(96 + index * 24), json.value(QStringLiteral("y")).toInt(160 + index * 24));
+    box.size = QSize(
+        qBound(kMinBoxSize, json.value(QStringLiteral("width")).toInt(kBoxSize), kMaxBoxSize),
+        qBound(kMinBoxSize, json.value(QStringLiteral("height")).toInt(kBoxSize), kMaxBoxSize));
     box.color = QColor(json.value(QStringLiteral("color")).toString(colorForIndex(index).name()));
 
     const QJsonArray items = json.value(QStringLiteral("items")).toArray();
@@ -698,11 +708,13 @@ Box StorageBoxApp::boxFromJson(const QJsonObject &json, int index) const
 BoxWindow::BoxWindow(StorageBoxApp *app, Box *box)
     : QWidget(nullptr), m_app(app), m_box(box)
 {
-    setFixedSize(kBoxSize, kBoxSize);
+    setMinimumSize(kMinBoxSize, kMinBoxSize);
+    setMaximumSize(kMaxBoxSize, kMaxBoxSize);
+    resize(m_box->size);
     setWindowIcon(QApplication::windowIcon());
     setAcceptDrops(true);
     setCursor(Qt::PointingHandCursor);
-    setToolTip(QStringLiteral("左键打开，拖动移动，右键管理，双击添加应用"));
+    setToolTip(QStringLiteral("左键打开，拖动移动，拖边缩放，右键管理，双击添加应用"));
     applyWindowFlags();
     move(m_box->position);
 }
@@ -715,6 +727,7 @@ Box *BoxWindow::box() const
 void BoxWindow::refresh()
 {
     applyWindowFlags();
+    resize(m_box->size);
     move(m_box->position);
     update();
     show();
@@ -747,12 +760,18 @@ void BoxWindow::mousePressEvent(QMouseEvent *event)
     }
     m_pressGlobal = event->globalPos();
     m_startPosition = pos();
+    m_startSize = size();
+    m_dragRegion = hitRegionAt(event->pos());
+    if (m_dragRegion != HitRegion::Move) {
+        m_app->closePopup();
+    }
     m_dragged = false;
 }
 
 void BoxWindow::mouseMoveEvent(QMouseEvent *event)
 {
     if (!(event->buttons() & Qt::LeftButton)) {
+        updateCursor(event->pos());
         QWidget::mouseMoveEvent(event);
         return;
     }
@@ -762,18 +781,24 @@ void BoxWindow::mouseMoveEvent(QMouseEvent *event)
         m_dragged = true;
     }
 
-    const QPoint next(qMax(0, m_startPosition.x() + delta.x()), qMax(0, m_startPosition.y() + delta.y()));
-    move(next);
-    m_box->position = next;
+    if (m_dragRegion == HitRegion::Move || m_dragRegion == HitRegion::None) {
+        const QPoint next(qMax(0, m_startPosition.x() + delta.x()), qMax(0, m_startPosition.y() + delta.y()));
+        move(next);
+        m_box->position = next;
+    } else {
+        applyResize(delta);
+    }
 }
 
 void BoxWindow::mouseReleaseEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton) {
         m_app->save();
-        if (!m_dragged) {
+        if (!m_dragged && m_dragRegion == HitRegion::Move) {
             m_app->showPopup(this);
         }
+        m_dragRegion = HitRegion::None;
+        updateCursor(event->pos());
         if (!m_app->alwaysOnTop()) {
             QTimer::singleShot(0, this, [this] { ensureWidgetNonTopmost(this); });
         }
@@ -834,14 +859,121 @@ void BoxWindow::dropEvent(QDropEvent *event)
     QWidget::dropEvent(event);
 }
 
+BoxWindow::HitRegion BoxWindow::hitRegionAt(const QPoint &point) const
+{
+    const bool left = point.x() <= kResizeGrip;
+    const bool right = point.x() >= width() - kResizeGrip;
+    const bool top = point.y() <= kResizeGrip;
+    const bool bottom = point.y() >= height() - kResizeGrip;
+
+    if (top && left) {
+        return HitRegion::TopLeft;
+    }
+    if (top && right) {
+        return HitRegion::TopRight;
+    }
+    if (bottom && left) {
+        return HitRegion::BottomLeft;
+    }
+    if (bottom && right) {
+        return HitRegion::BottomRight;
+    }
+    if (left) {
+        return HitRegion::Left;
+    }
+    if (right) {
+        return HitRegion::Right;
+    }
+    if (top) {
+        return HitRegion::Top;
+    }
+    if (bottom) {
+        return HitRegion::Bottom;
+    }
+    return HitRegion::Move;
+}
+
+void BoxWindow::updateCursor(const QPoint &point)
+{
+    switch (hitRegionAt(point)) {
+    case HitRegion::Left:
+    case HitRegion::Right:
+        setCursor(Qt::SizeHorCursor);
+        break;
+    case HitRegion::Top:
+    case HitRegion::Bottom:
+        setCursor(Qt::SizeVerCursor);
+        break;
+    case HitRegion::TopLeft:
+    case HitRegion::BottomRight:
+        setCursor(Qt::SizeFDiagCursor);
+        break;
+    case HitRegion::TopRight:
+    case HitRegion::BottomLeft:
+        setCursor(Qt::SizeBDiagCursor);
+        break;
+    default:
+        setCursor(Qt::PointingHandCursor);
+        break;
+    }
+}
+
+void BoxWindow::applyResize(const QPoint &delta)
+{
+    QRect next(m_startPosition, m_startSize);
+
+    switch (m_dragRegion) {
+    case HitRegion::Left:
+    case HitRegion::TopLeft:
+    case HitRegion::BottomLeft: {
+        const int newWidth = qBound(kMinBoxSize, m_startSize.width() - delta.x(), kMaxBoxSize);
+        next.setLeft(m_startPosition.x() + (m_startSize.width() - newWidth));
+        next.setWidth(newWidth);
+        break;
+    }
+    case HitRegion::Right:
+    case HitRegion::TopRight:
+    case HitRegion::BottomRight:
+        next.setWidth(qBound(kMinBoxSize, m_startSize.width() + delta.x(), kMaxBoxSize));
+        break;
+    default:
+        break;
+    }
+
+    switch (m_dragRegion) {
+    case HitRegion::Top:
+    case HitRegion::TopLeft:
+    case HitRegion::TopRight: {
+        const int newHeight = qBound(kMinBoxSize, m_startSize.height() - delta.y(), kMaxBoxSize);
+        next.setTop(m_startPosition.y() + (m_startSize.height() - newHeight));
+        next.setHeight(newHeight);
+        break;
+    }
+    case HitRegion::Bottom:
+    case HitRegion::BottomLeft:
+    case HitRegion::BottomRight:
+        next.setHeight(qBound(kMinBoxSize, m_startSize.height() + delta.y(), kMaxBoxSize));
+        break;
+    default:
+        break;
+    }
+
+    next.moveTopLeft(QPoint(qMax(0, next.x()), qMax(0, next.y())));
+    setGeometry(next);
+    m_box->position = next.topLeft();
+    m_box->size = next.size();
+}
+
 void BoxWindow::paintEvent(QPaintEvent *)
 {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
 
+    const int side = qMin(width(), height());
     QRectF outer(2, 2, width() - 4, height() - 4);
     QPainterPath path;
-    path.addRoundedRect(outer, 16, 16);
+    const qreal radius = qBound(10.0, side / 5.0, 24.0);
+    path.addRoundedRect(outer, radius, radius);
 
     painter.fillPath(path, m_box->color);
     painter.setPen(QPen(QColor(255, 255, 255, 220), 2));
@@ -849,21 +981,33 @@ void BoxWindow::paintEvent(QPaintEvent *)
 
     painter.setPen(Qt::white);
     QFont nameFont(QStringLiteral("Microsoft YaHei UI"), 9, QFont::DemiBold);
+    nameFont.setPointSize(qBound(7, side / 8, 12));
     painter.setFont(nameFont);
-    painter.drawText(QRect(8, 10, width() - 16, 28), Qt::AlignCenter | Qt::TextWordWrap, elide(m_box->name, 8));
+    painter.drawText(
+        QRect(8, qMax(6, height() / 9), width() - 16, qMax(18, height() / 3)),
+        Qt::AlignCenter | Qt::TextWordWrap,
+        elide(m_box->name, qBound(6, width() / 10, 14)));
 
     QFont countFont(QStringLiteral("Segoe UI"), 11, QFont::Bold);
+    countFont.setPointSize(qBound(9, side / 7, 18));
     painter.setFont(countFont);
-    painter.drawText(QRect(0, 47, width(), 20), Qt::AlignCenter, QStringLiteral("%1/9").arg(m_box->items.size()));
+    painter.drawText(
+        QRect(0, height() / 2, width(), qMax(18, height() / 4)),
+        Qt::AlignCenter,
+        QStringLiteral("%1/9").arg(m_box->items.size()));
 
-    const int startX = 25;
-    const int startY = 38;
+    const qreal spacing = qMax(7.0, side / 6.0);
+    const qreal dotRadius = qBound(1.8, side / 34.0, 4.0);
+    const QPointF dotCenter(width() / 2.0, height() * 0.76);
     painter.setPen(Qt::NoPen);
     for (int i = 0; i < kMaxItemsPerBox; ++i) {
         const int row = i / 3;
         const int col = i % 3;
         painter.setBrush(i < m_box->items.size() ? QColor("#ffffff") : QColor(255, 255, 255, 90));
-        painter.drawEllipse(QPointF(startX + col * 14, startY + row * 7), 2.2, 2.2);
+        painter.drawEllipse(
+            QPointF(dotCenter.x() + (col - 1) * spacing, dotCenter.y() + (row - 1) * spacing * 0.55),
+            dotRadius,
+            dotRadius);
     }
 }
 
@@ -874,7 +1018,7 @@ BoxPopup::BoxPopup(StorageBoxApp *app, BoxWindow *boxWindow)
     setWindowIcon(QApplication::windowIcon());
     setAcceptDrops(true);
     applyWindowFlags();
-    move(box()->position + QPoint(0, kBoxSize + 8));
+    move(box()->position + QPoint(0, box()->size.height() + 8));
     buildUi();
 }
 
@@ -886,7 +1030,7 @@ Box *BoxPopup::box() const
 void BoxPopup::refresh()
 {
     applyWindowFlags();
-    move(box()->position + QPoint(0, kBoxSize + 8));
+    move(box()->position + QPoint(0, box()->size.height() + 8));
     rebuildGrid();
     update();
     show();
