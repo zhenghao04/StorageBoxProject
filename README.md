@@ -7,7 +7,7 @@
 普通用户不需要安装 Qt 或编译源码。到 GitHub Releases 下载：
 
 ```text
-StorageBoxLauncher-v0.1.0-win64.zip
+StorageBoxLauncher-v0.1.1-win64.zip
 ```
 
 解压后直接运行：
@@ -22,7 +22,7 @@ StorageBoxLauncher.exe
 - 每个盒子最多收纳 9 个应用、快捷方式或脚本
 - 左键点击盒子展开 3x3 应用面板
 - 点击面板里的应用直接启动
-- 拖动盒子改变位置，并自动保存
+- 拖动盒子改变位置，拖动盒子边缘/角落调整大小，并自动保存
 - 右键盒子可添加应用、重命名、新建盒子、删除盒子、切换置顶和退出
 - 默认不置顶，Windows 下会作为普通非置顶窗口，打开其他应用时不会浮在最上层遮挡
 - 九宫格会自动读取 `.exe`、`.lnk`、`.url` 等文件的系统图标
@@ -74,13 +74,13 @@ cmake --build build --config Release
 生成可直接分发的 Windows 便携包：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools\package_release.ps1 -Version 0.1.0
+powershell -ExecutionPolicy Bypass -File tools\package_release.ps1 -Version 0.1.1
 ```
 
 产物位于：
 
 ```text
-dist\StorageBoxLauncher-v0.1.0-win64.zip
+dist\StorageBoxLauncher-v0.1.1-win64.zip
 ```
 
 ## 图标资源
