@@ -4,9 +4,14 @@ on:
   push:
     branches:
       - main
+      # 临时添加，用于当前正在修复 CI 的阶段。
+      # 正常情况下，feature/fix 分支应该通过提交 PR 到 main 来触发 CI（pull_request 事件）。
+      # 修复完成后建议把下面两行去掉，只保留 main + pull_request。
       - fix/ci
       - develop
   pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
