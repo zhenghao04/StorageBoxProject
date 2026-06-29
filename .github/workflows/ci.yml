@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+      - fix/ci
+      - develop
   pull_request:
 
 permissions:
