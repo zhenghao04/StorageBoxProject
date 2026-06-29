@@ -1,5 +1,7 @@
 # Storage Box Launcher
 
+[![CI](https://github.com/zhenghao04/StorageBoxProject/actions/workflows/ci.yml/badge.svg)](https://github.com/zhenghao04/StorageBoxProject/actions/workflows/ci.yml)
+
 一个 Windows 桌面“启动器收纳盒”原型，使用 C++ 和 Qt Widgets 实现。
 
 ## 直接下载使用
@@ -9,6 +11,8 @@
 ```text
 StorageBoxLauncher-v0.1.1-win64.zip
 ```
+
+说明：`main` 分支包含 v0.1.1 之后的开发改动。正式可下载版本以 GitHub Releases 页面为准。
 
 解压后直接运行：
 
@@ -31,6 +35,14 @@ StorageBoxLauncher.exe
 - 支持在九宫格内拖动项目调整顺序
 - 配置保存到 Qt 的 `AppDataLocation`，通常位于 `%APPDATA%\StorageBoxProject\Storage Box Launcher\config.json`
 - 自带应用图标，已接入窗口、托盘、快捷方式和 Windows exe 资源
+
+## 文档
+
+- 维护者/Agent 说明：[AGENTS.md](AGENTS.md)
+- 测试计划：[docs/TEST_PLAN.md](docs/TEST_PLAN.md)
+- 调试指南：[docs/DEBUGGING.md](docs/DEBUGGING.md)
+- 质量缺口和后续优先级：[docs/QUALITY_GAPS.md](docs/QUALITY_GAPS.md)
+- Release notes：[docs](docs)
 
 ## 构建
 
@@ -83,6 +95,10 @@ powershell -ExecutionPolicy Bypass -File tools\package_release.ps1 -Version 0.1.
 ```text
 dist\StorageBoxLauncher-v0.1.1-win64.zip
 ```
+
+## CI 检查
+
+GitHub Actions 会在 `main` 推送和 Pull Request 时执行 Windows Release 构建，检查 Qt/MSVC 环境下是否能产出 `StorageBoxLauncher.exe`，并运行一次 `windeployqt` 部署烟测。
 
 ## 图标资源
 
