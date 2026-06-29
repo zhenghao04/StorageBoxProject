@@ -36,20 +36,24 @@ jobs:
         with:
           arch: x64
 
+      - name: Install Ninja
+        run: choco install ninja -y
+        shell: pwsh
+
       - name: Configure
         shell: pwsh
         run: |
-          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR"
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR"
 
       - name: Build
         shell: pwsh
         run: |
-          cmake --build build --config Release --parallel
+          cmake --build build --parallel
 
       - name: Verify executable
         shell: pwsh
         run: |
-          $exe = "build\Release\StorageBoxLauncher.exe"
+          $exe = "build\StorageBoxLauncher.exe"
           if (-not (Test-Path $exe)) {
             throw "Expected executable was not produced: $exe"
           }
@@ -58,11 +62,11 @@ jobs:
       - name: Deploy Qt runtime smoke check
         shell: pwsh
         run: |
-          & "$env:QT_ROOT_DIR\bin\windeployqt.exe" "build\Release\StorageBoxLauncher.exe" --no-translations
+          & "$env:QT_ROOT_DIR\bin\windeployqt.exe" "build\StorageBoxLauncher.exe" --no-translations
 
       - name: Upload Release build artifact
         uses: actions/upload-artifact@v4
         with:
           name: StorageBoxLauncher-Release
-          path: build/Release/
+          path: build/
           if-no-files-found: error
