@@ -2,14 +2,19 @@
 
 #include <QAction>
 #include <QApplication>
+#include <QCheckBox>
 #include <QContextMenuEvent>
 #include <QColorDialog>
+#include <QComboBox>
 #include <QDateTime>
 #include <QDesktopServices>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QDrag>
 #include <QDragEnterEvent>
 #include <QDragLeaveEvent>
 #include <QDropEvent>
+#include <QEasingCurve>
 #include <QDir>
 #include <QEvent>
 #include <QFile>
@@ -17,6 +22,7 @@
 #include <QFileIconProvider>
 #include <QFileInfo>
 #include <QFont>
+#include <QFormLayout>
 #include <QFrame>
 #include <QGraphicsDropShadowEffect>
 #include <QGridLayout>
@@ -36,6 +42,8 @@
 #include <QPainterPath>
 #include <QPixmap>
 #include <QPushButton>
+#include <QParallelAnimationGroup>
+#include <QPropertyAnimation>
 #include <QRandomGenerator>
 #include <QSaveFile>
 #include <QSize>
@@ -65,6 +73,34 @@ constexpr int kCellHeight = 78;
 constexpr int kConfigSchemaVersion = 2;
 constexpr const char *kItemIndexMime = "application/x-storagebox-item-index";
 constexpr const char *kBoxIdMime = "application/x-storagebox-id";
+constexpr const char *kDefaultThemeId = "softLight";
+
+struct UiTheme
+{
+    QString id;
+    QString name;
+    QString panelBg;
+    QString panelBorder;
+    QString titleColor;
+    QString subtleColor;
+    QString buttonBg;
+    QString buttonHoverBg;
+    QString buttonPressedBg;
+    QString buttonTextColor;
+    QString emptyBg;
+    QString emptyHoverBg;
+    QString emptyBorderColor;
+    QString missingBg;
+    QString missingBorderColor;
+    QString missingTextColor;
+    QString headerButtonBg;
+    QString headerButtonHoverBg;
+    QString headerButtonTextColor;
+    QColor shadowColor;
+    QColor boxShadowColor;
+    QColor boxSheenColor;
+    int countPillAlpha;
+};
 
 QString makeId()
 {
@@ -260,6 +296,124 @@ const QList<QPair<QString, QColor>> &boxColorThemes()
     return themes;
 }
 
+const QList<UiTheme> &uiThemes()
+{
+    static const QList<UiTheme> themes = {
+        {
+            QStringLiteral("softLight"),
+            QStringLiteral("清透浅色"),
+            QStringLiteral("rgba(248, 250, 252, 244)"),
+            QStringLiteral("rgba(148, 163, 184, 150)"),
+            QStringLiteral("#0f172a"),
+            QStringLiteral("#64748b"),
+            QStringLiteral("rgba(255, 255, 255, 238)"),
+            QStringLiteral("#eff6ff"),
+            QStringLiteral("#dbeafe"),
+            QStringLiteral("#111827"),
+            QStringLiteral("rgba(241, 245, 249, 210)"),
+            QStringLiteral("#e2e8f0"),
+            QStringLiteral("#94a3b8"),
+            QStringLiteral("#fff7ed"),
+            QStringLiteral("#fdba74"),
+            QStringLiteral("#b45309"),
+            QStringLiteral("#e2e8f0"),
+            QStringLiteral("#cbd5e1"),
+            QStringLiteral("#0f172a"),
+            QColor(15, 23, 42, 72),
+            QColor(15, 23, 42, 46),
+            QColor(255, 255, 255, 58),
+            56,
+        },
+        {
+            QStringLiteral("glassDark"),
+            QStringLiteral("深色玻璃"),
+            QStringLiteral("rgba(15, 23, 42, 238)"),
+            QStringLiteral("rgba(125, 211, 252, 120)"),
+            QStringLiteral("#f8fafc"),
+            QStringLiteral("#cbd5e1"),
+            QStringLiteral("rgba(30, 41, 59, 236)"),
+            QStringLiteral("rgba(14, 165, 233, 92)"),
+            QStringLiteral("rgba(59, 130, 246, 112)"),
+            QStringLiteral("#f8fafc"),
+            QStringLiteral("rgba(30, 41, 59, 220)"),
+            QStringLiteral("rgba(51, 65, 85, 235)"),
+            QStringLiteral("#64748b"),
+            QStringLiteral("rgba(69, 26, 3, 220)"),
+            QStringLiteral("#f97316"),
+            QStringLiteral("#fed7aa"),
+            QStringLiteral("rgba(30, 41, 59, 240)"),
+            QStringLiteral("rgba(51, 65, 85, 245)"),
+            QStringLiteral("#e0f2fe"),
+            QColor(2, 6, 23, 126),
+            QColor(2, 6, 23, 82),
+            QColor(255, 255, 255, 42),
+            92,
+        },
+        {
+            QStringLiteral("warm"),
+            QStringLiteral("暖砂柔光"),
+            QStringLiteral("rgba(255, 251, 235, 244)"),
+            QStringLiteral("rgba(251, 191, 36, 132)"),
+            QStringLiteral("#451a03"),
+            QStringLiteral("#92400e"),
+            QStringLiteral("rgba(255, 255, 247, 238)"),
+            QStringLiteral("#fef3c7"),
+            QStringLiteral("#fde68a"),
+            QStringLiteral("#451a03"),
+            QStringLiteral("rgba(254, 243, 199, 210)"),
+            QStringLiteral("#fde68a"),
+            QStringLiteral("#d97706"),
+            QStringLiteral("#fff7ed"),
+            QStringLiteral("#fb923c"),
+            QStringLiteral("#9a3412"),
+            QStringLiteral("#fde68a"),
+            QStringLiteral("#fcd34d"),
+            QStringLiteral("#451a03"),
+            QColor(120, 53, 15, 62),
+            QColor(120, 53, 15, 44),
+            QColor(255, 255, 255, 66),
+            50,
+        },
+        {
+            QStringLiteral("minimal"),
+            QStringLiteral("极简白"),
+            QStringLiteral("rgba(255, 255, 255, 248)"),
+            QStringLiteral("rgba(209, 213, 219, 180)"),
+            QStringLiteral("#111827"),
+            QStringLiteral("#6b7280"),
+            QStringLiteral("#ffffff"),
+            QStringLiteral("#f3f4f6"),
+            QStringLiteral("#e5e7eb"),
+            QStringLiteral("#111827"),
+            QStringLiteral("#f9fafb"),
+            QStringLiteral("#f3f4f6"),
+            QStringLiteral("#d1d5db"),
+            QStringLiteral("#fffbeb"),
+            QStringLiteral("#f59e0b"),
+            QStringLiteral("#92400e"),
+            QStringLiteral("#f3f4f6"),
+            QStringLiteral("#e5e7eb"),
+            QStringLiteral("#111827"),
+            QColor(17, 24, 39, 42),
+            QColor(17, 24, 39, 32),
+            QColor(255, 255, 255, 48),
+            44,
+        },
+    };
+    return themes;
+}
+
+const UiTheme &uiThemeById(const QString &themeId)
+{
+    const auto &themes = uiThemes();
+    for (const UiTheme &theme : themes) {
+        if (theme.id == themeId) {
+            return theme;
+        }
+    }
+    return themes.first();
+}
+
 QPixmap scaledCoverPixmap(const QPixmap &source, const QSize &targetSize)
 {
     if (source.isNull() || targetSize.isEmpty()) {
@@ -333,30 +487,67 @@ QPixmap boxPreviewPixmap(const Box *box, const QSize &targetSize)
     painter.drawText(rect, Qt::AlignCenter, box && !box->name.isEmpty() ? box->name.left(1).toUpper() : QStringLiteral("S"));
     return pixmap;
 }
+
+QIcon iconForItemPath(const QString &path, bool pathExists)
+{
+    const QIcon baseIcon = iconForPath(path);
+    if (pathExists) {
+        return baseIcon;
+    }
+
+    QPixmap pixmap = baseIcon.pixmap(QSize(42, 42));
+    if (pixmap.isNull()) {
+        pixmap = QPixmap(42, 42);
+        pixmap.fill(Qt::transparent);
+    }
+
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.fillRect(pixmap.rect(), QColor(248, 250, 252, 142));
+    painter.setPen(QPen(QColor(148, 163, 184, 180), 1));
+    painter.drawRoundedRect(QRectF(0.5, 0.5, pixmap.width() - 1, pixmap.height() - 1), 8, 8);
+
+    const QRectF badge(pixmap.width() - 17, pixmap.height() - 17, 15, 15);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(249, 115, 22));
+    painter.drawEllipse(badge);
+    painter.setPen(Qt::white);
+    QFont badgeFont(QStringLiteral("Segoe UI"), 10, QFont::Bold);
+    painter.setFont(badgeFont);
+    painter.drawText(badge, Qt::AlignCenter, QStringLiteral("!"));
+    return QIcon(pixmap);
+}
 }
 
 StorageBoxApp::StorageBoxApp(QObject *parent)
-    : QObject(parent)
+    : QObject(parent), m_themeId(QString::fromLatin1(kDefaultThemeId))
 {
 }
 
 StorageBoxApp::~StorageBoxApp()
 {
-    closePopup();
+    closePopupNow(false);
     qDeleteAll(m_windows);
 }
 
 void StorageBoxApp::start()
 {
     load();
-    setupTray();
-    renderBoxes();
+    renderBoxes(false);
+    QTimer::singleShot(0, this, &StorageBoxApp::setupTray);
+    if (m_configNeedsSave) {
+        QTimer::singleShot(250, this, [this] {
+            save();
+        });
+    }
 }
 
 void StorageBoxApp::load()
 {
     m_boxes.clear();
     m_alwaysOnTop = false;
+    m_configNeedsSave = false;
+    m_themeId = QString::fromLatin1(kDefaultThemeId);
 
     QFile file(configFilePath());
     if (!file.open(QIODevice::ReadOnly)) {
@@ -387,6 +578,11 @@ void StorageBoxApp::load()
     }
 
     m_alwaysOnTop = root.value(QStringLiteral("alwaysOnTop")).toBool(false);
+    m_themeId = root.value(QStringLiteral("theme")).toString(QString::fromLatin1(kDefaultThemeId));
+    if (uiThemeById(m_themeId).id != m_themeId) {
+        m_themeId = QString::fromLatin1(kDefaultThemeId);
+        m_configNeedsSave = true;
+    }
 
     const QJsonArray boxes = root.value(QStringLiteral("boxes")).toArray();
     for (int i = 0; i < boxes.size(); ++i) {
@@ -414,6 +610,7 @@ void StorageBoxApp::ensureDefaults()
         QString(),
         {},
     });
+    m_configNeedsSave = true;
 }
 
 void StorageBoxApp::save()
@@ -422,6 +619,7 @@ void StorageBoxApp::save()
     root.insert(QStringLiteral("schemaVersion"), kConfigSchemaVersion);
     root.insert(QStringLiteral("savedAtUtc"), QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
     root.insert(QStringLiteral("alwaysOnTop"), m_alwaysOnTop);
+    root.insert(QStringLiteral("theme"), m_themeId);
 
     QJsonArray boxes;
     for (const Box &box : m_boxes) {
@@ -439,12 +637,14 @@ void StorageBoxApp::save()
         return;
     }
     file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
-    file.commit();
+    if (file.commit()) {
+        m_configNeedsSave = false;
+    }
 }
 
-void StorageBoxApp::renderBoxes()
+void StorageBoxApp::renderBoxes(bool persist)
 {
-    closePopup();
+    closePopupNow(false);
     for (BoxWindow *window : qAsConst(m_windows)) {
         window->close();
         window->deleteLater();
@@ -460,7 +660,9 @@ void StorageBoxApp::renderBoxes()
         }
     }
 
-    save();
+    if (persist) {
+        save();
+    }
 }
 
 void StorageBoxApp::refreshViews(Box *box)
@@ -507,6 +709,10 @@ void StorageBoxApp::setupTray()
 
     menu->addAction(QStringLiteral("打开配置文件夹"), this, [this] {
         openConfigFolder(nullptr);
+    });
+
+    menu->addAction(QStringLiteral("设置..."), this, [this] {
+        showSettings(nullptr);
     });
 
     menu->addSeparator();
@@ -616,7 +822,7 @@ void StorageBoxApp::showPopup(BoxWindow *window)
 
     closePopup();
     m_popup = new BoxPopup(this, window);
-    m_popup->show();
+    m_popup->showAnimated();
     if (!m_alwaysOnTop) {
         BoxPopup *popup = m_popup.data();
         QTimer::singleShot(0, popup, [popup] { ensureWidgetNonTopmost(popup); });
@@ -625,12 +831,22 @@ void StorageBoxApp::showPopup(BoxWindow *window)
 
 void StorageBoxApp::closePopup()
 {
+    closePopupNow(true);
+}
+
+void StorageBoxApp::closePopupNow(bool animated)
+{
     if (!m_popup) {
         return;
     }
-    m_popup->close();
-    m_popup->deleteLater();
+    BoxPopup *popup = m_popup.data();
     m_popup = nullptr;
+    if (animated) {
+        popup->closeAnimated();
+        return;
+    }
+    popup->close();
+    popup->deleteLater();
 }
 
 void StorageBoxApp::addBox()
@@ -951,6 +1167,87 @@ bool StorageBoxApp::alwaysOnTop() const
     return m_alwaysOnTop;
 }
 
+void StorageBoxApp::showSettings(QWidget *parent)
+{
+    QDialog dialog(parent);
+    dialog.setWindowTitle(QStringLiteral("设置"));
+    dialog.setWindowIcon(QApplication::windowIcon());
+    dialog.setMinimumWidth(360);
+
+    auto *root = new QVBoxLayout(&dialog);
+    root->setContentsMargins(18, 18, 18, 14);
+    root->setSpacing(14);
+
+    auto *form = new QFormLayout;
+    form->setLabelAlignment(Qt::AlignLeft);
+    form->setFormAlignment(Qt::AlignTop);
+    form->setHorizontalSpacing(18);
+    form->setVerticalSpacing(12);
+
+    auto *themeBox = new QComboBox(&dialog);
+    for (const UiTheme &theme : uiThemes()) {
+        themeBox->addItem(theme.name, theme.id);
+    }
+    const int themeIndex = themeBox->findData(m_themeId);
+    if (themeIndex >= 0) {
+        themeBox->setCurrentIndex(themeIndex);
+    }
+    connect(themeBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, themeBox](int index) {
+        setThemeId(themeBox->itemData(index).toString());
+    });
+    form->addRow(QStringLiteral("外观主题"), themeBox);
+
+    auto *topmost = new QCheckBox(QStringLiteral("置顶显示"), &dialog);
+    topmost->setChecked(m_alwaysOnTop);
+    connect(topmost, &QCheckBox::toggled, this, &StorageBoxApp::setAlwaysOnTop);
+    form->addRow(QStringLiteral("窗口"), topmost);
+
+    auto *startup = new QCheckBox(QStringLiteral("开机自启动"), &dialog);
+    startup->setChecked(startAtLogin());
+    connect(startup, &QCheckBox::toggled, this, [this, startup, &dialog](bool enabled) {
+        if (!setStartAtLogin(enabled, &dialog)) {
+            const bool wasBlocked = startup->blockSignals(true);
+            startup->setChecked(startAtLogin());
+            startup->blockSignals(wasBlocked);
+        }
+    });
+    form->addRow(QStringLiteral("启动"), startup);
+
+    const QFileInfo configInfo(configFilePath());
+    auto *configLabel = new QLabel(QDir::toNativeSeparators(configInfo.absolutePath()), &dialog);
+    configLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    configLabel->setWordWrap(true);
+    form->addRow(QStringLiteral("配置位置"), configLabel);
+
+    root->addLayout(form);
+
+    auto *actions = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
+    auto *openConfig = actions->addButton(QStringLiteral("打开配置文件夹"), QDialogButtonBox::ActionRole);
+    connect(openConfig, &QPushButton::clicked, this, [this, &dialog] {
+        openConfigFolder(&dialog);
+    });
+    connect(actions, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    root->addWidget(actions);
+
+    dialog.exec();
+}
+
+void StorageBoxApp::setThemeId(const QString &themeId)
+{
+    const UiTheme &theme = uiThemeById(themeId);
+    if (m_themeId == theme.id) {
+        return;
+    }
+
+    m_themeId = theme.id;
+    refreshViews();
+}
+
+QString StorageBoxApp::themeId() const
+{
+    return m_themeId;
+}
+
 void StorageBoxApp::openConfigFolder(QWidget *parent) const
 {
     const QFileInfo configInfo(configFilePath());
@@ -1238,6 +1535,10 @@ void BoxWindow::contextMenuEvent(QContextMenuEvent *event)
         m_app->clearBoxIcon(m_box);
     });
     clearIcon->setEnabled(!m_box->iconPath.isEmpty());
+    appearanceMenu->addSeparator();
+    appearanceMenu->addAction(QStringLiteral("界面设置..."), this, [this] {
+        m_app->showSettings(this);
+    });
     menu.addSeparator();
 
     QAction *topmost = menu.addAction(QStringLiteral("置顶显示"));
@@ -1258,6 +1559,10 @@ void BoxWindow::contextMenuEvent(QContextMenuEvent *event)
 
     menu.addAction(QStringLiteral("打开配置文件夹"), this, [this] {
         m_app->openConfigFolder(this);
+    });
+
+    menu.addAction(QStringLiteral("设置..."), this, [this] {
+        m_app->showSettings(this);
     });
 
     menu.addAction(QStringLiteral("新建盒子"), m_app, &StorageBoxApp::addBox);
@@ -1413,6 +1718,7 @@ void BoxWindow::paintEvent(QPaintEvent *)
 {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
+    const UiTheme &theme = uiThemeById(m_app->themeId());
 
     const int side = qMin(width(), height());
     const qreal radius = qBound(12.0, side / 4.3, 26.0);
@@ -1420,7 +1726,9 @@ void BoxWindow::paintEvent(QPaintEvent *)
     const QRectF shadowRect(5, 7, width() - 10, height() - 12);
     QPainterPath shadowPath;
     shadowPath.addRoundedRect(shadowRect, radius + 2, radius + 2);
-    painter.fillPath(shadowPath, QColor(15, 23, 42, m_hovered ? 70 : 44));
+    QColor shadowColor = theme.boxShadowColor;
+    shadowColor.setAlpha(qMin(255, shadowColor.alpha() + (m_hovered ? 22 : 0)));
+    painter.fillPath(shadowPath, shadowColor);
 
     const QRectF outer(4, 3, width() - 8, height() - 10);
     QPainterPath path;
@@ -1434,7 +1742,9 @@ void BoxWindow::paintEvent(QPaintEvent *)
     painter.fillPath(path, background);
 
     QLinearGradient sheen(outer.topLeft(), QPointF(outer.left(), outer.center().y()));
-    sheen.setColorAt(0.0, QColor(255, 255, 255, m_hovered ? 76 : 54));
+    QColor sheenColor = theme.boxSheenColor;
+    sheenColor.setAlpha(qMin(255, sheenColor.alpha() + (m_hovered ? 18 : 0)));
+    sheen.setColorAt(0.0, sheenColor);
     sheen.setColorAt(1.0, QColor(255, 255, 255, 0));
     painter.save();
     painter.setClipPath(path);
@@ -1459,7 +1769,7 @@ void BoxWindow::paintEvent(QPaintEvent *)
     const int pillWidth = qMax(countMetrics.horizontalAdvance(countText) + 12, pillHeight + 8);
     const QRectF pillRect(outer.right() - pillWidth - 7, outer.top() + 7, pillWidth, pillHeight);
     painter.setPen(Qt::NoPen);
-    painter.setBrush(QColor(15, 23, 42, 54));
+    painter.setBrush(QColor(15, 23, 42, theme.countPillAlpha));
     painter.drawRoundedRect(pillRect, pillHeight / 2.0, pillHeight / 2.0);
     painter.setPen(QColor(255, 255, 255, 230));
     painter.drawText(pillRect, Qt::AlignCenter, countText);
@@ -1552,6 +1862,66 @@ void BoxPopup::refresh()
     }
 }
 
+void BoxPopup::showAnimated()
+{
+    m_closing = false;
+    const QRect finalGeometry = geometry();
+    QRect startGeometry = finalGeometry.adjusted(18, 12, -18, -12);
+    startGeometry.moveCenter(finalGeometry.center());
+
+    setWindowOpacity(0.0);
+    setGeometry(startGeometry);
+    show();
+
+    auto *group = new QParallelAnimationGroup(this);
+    auto *opacity = new QPropertyAnimation(this, "windowOpacity", group);
+    opacity->setDuration(145);
+    opacity->setStartValue(0.0);
+    opacity->setEndValue(1.0);
+    opacity->setEasingCurve(QEasingCurve::OutCubic);
+
+    auto *geometry = new QPropertyAnimation(this, "geometry", group);
+    geometry->setDuration(145);
+    geometry->setStartValue(startGeometry);
+    geometry->setEndValue(finalGeometry);
+    geometry->setEasingCurve(QEasingCurve::OutCubic);
+
+    connect(group, &QParallelAnimationGroup::finished, group, &QObject::deleteLater);
+    group->start();
+}
+
+void BoxPopup::closeAnimated()
+{
+    if (m_closing) {
+        return;
+    }
+    m_closing = true;
+
+    const QRect startGeometry = geometry();
+    QRect endGeometry = startGeometry.adjusted(16, 10, -16, -10);
+    endGeometry.moveCenter(startGeometry.center());
+
+    auto *group = new QParallelAnimationGroup(this);
+    auto *opacity = new QPropertyAnimation(this, "windowOpacity", group);
+    opacity->setDuration(120);
+    opacity->setStartValue(windowOpacity());
+    opacity->setEndValue(0.0);
+    opacity->setEasingCurve(QEasingCurve::InCubic);
+
+    auto *geometry = new QPropertyAnimation(this, "geometry", group);
+    geometry->setDuration(120);
+    geometry->setStartValue(startGeometry);
+    geometry->setEndValue(endGeometry);
+    geometry->setEasingCurve(QEasingCurve::InCubic);
+
+    connect(group, &QParallelAnimationGroup::finished, this, [this, group] {
+        group->deleteLater();
+        close();
+        deleteLater();
+    });
+    group->start();
+}
+
 void BoxPopup::startItemDrag(int index, QWidget *source)
 {
     if (index < 0 || index >= box()->items.size()) {
@@ -1629,6 +1999,12 @@ void BoxPopup::applyWindowFlags()
     if (m_app->alwaysOnTop()) {
         restoreWidgetLayer(this);
     }
+    const UiTheme &theme = uiThemeById(m_app->themeId());
+    if (auto *panel = findChild<QFrame *>(QStringLiteral("popupPanel"))) {
+        if (auto *shadow = qobject_cast<QGraphicsDropShadowEffect *>(panel->graphicsEffect())) {
+            shadow->setColor(theme.shadowColor);
+        }
+    }
 
     Qt::WindowFlags flags = Qt::FramelessWindowHint | Qt::Tool;
     if (m_app->alwaysOnTop()) {
@@ -1637,18 +2013,44 @@ void BoxPopup::applyWindowFlags()
     setWindowFlags(flags);
     setAttribute(Qt::WA_StyledBackground, true);
     setAttribute(Qt::WA_TranslucentBackground, true);
-    setStyleSheet(QStringLiteral(
-        "BoxPopup { background: transparent; }"
-        "QFrame#popupPanel { background: rgba(248, 250, 252, 242); border: 1px solid rgba(148, 163, 184, 150); border-radius: 18px; }"
-        "QLabel#popupTitle { color: #0f172a; font-size: 14px; font-weight: 700; }"
-        "QLabel#popupCount { color: #64748b; font-size: 11px; }"
-        "QPushButton#headerButton { min-width: 30px; max-width: 30px; min-height: 30px; max-height: 30px; border: 0; border-radius: 15px; background: #e2e8f0; color: #0f172a; font-size: 16px; font-weight: 700; }"
-        "QPushButton#headerButton:hover { background: #cbd5e1; }"
-        "QToolButton { border-radius: 12px; border: 1px solid rgba(203, 213, 225, 210); background: rgba(255, 255, 255, 235); color: #111827; padding: 5px; }"
-        "QToolButton:hover { background: #eff6ff; border-color: #60a5fa; }"
-        "QToolButton:pressed { background: #dbeafe; }"
-        "QToolButton#emptySlot { border: 1px dashed #94a3b8; background: rgba(241, 245, 249, 205); color: #64748b; font-size: 24px; font-weight: 600; }"
-        "QToolButton#emptySlot:hover { background: #e2e8f0; border-color: #64748b; color: #334155; }"));
+    setStyleSheet(
+        QStringLiteral("BoxPopup { background: transparent; }")
+        + QStringLiteral("QFrame#popupPanel { background: ") + theme.panelBg
+        + QStringLiteral("; border: 1px solid ") + theme.panelBorder
+        + QStringLiteral("; border-radius: 18px; }")
+        + QStringLiteral("QLabel#popupTitle { color: ") + theme.titleColor
+        + QStringLiteral("; font-size: 14px; font-weight: 700; }")
+        + QStringLiteral("QLabel#popupCount { color: ") + theme.subtleColor
+        + QStringLiteral("; font-size: 11px; }")
+        + QStringLiteral("QPushButton#headerButton { min-width: 30px; max-width: 30px; min-height: 30px; max-height: 30px; border: 0; border-radius: 15px; background: ")
+        + theme.headerButtonBg + QStringLiteral("; color: ") + theme.headerButtonTextColor
+        + QStringLiteral("; font-size: 16px; font-weight: 700; }")
+        + QStringLiteral("QPushButton#headerButton:hover { background: ") + theme.headerButtonHoverBg
+        + QStringLiteral("; }")
+        + QStringLiteral("QToolButton { border-radius: 12px; border: 1px solid ") + theme.panelBorder
+        + QStringLiteral("; background: ") + theme.buttonBg
+        + QStringLiteral("; color: ") + theme.buttonTextColor
+        + QStringLiteral("; padding: 5px; }")
+        + QStringLiteral("QToolButton:hover { background: ") + theme.buttonHoverBg
+        + QStringLiteral("; border-color: #60a5fa; }")
+        + QStringLiteral("QToolButton:pressed { background: ") + theme.buttonPressedBg
+        + QStringLiteral("; }")
+        + QStringLiteral("QToolButton#emptySlot { border: 1px dashed ") + theme.emptyBorderColor
+        + QStringLiteral("; background: ") + theme.emptyBg
+        + QStringLiteral("; color: ") + theme.subtleColor
+        + QStringLiteral("; font-size: 24px; font-weight: 600; }")
+        + QStringLiteral("QToolButton#emptySlot:hover { background: ") + theme.emptyHoverBg
+        + QStringLiteral("; border-color: ") + theme.emptyBorderColor
+        + QStringLiteral("; color: ") + theme.titleColor
+        + QStringLiteral("; }")
+        + QStringLiteral("QToolButton[missingItem=\"true\"] { background: ") + theme.missingBg
+        + QStringLiteral("; border-color: ") + theme.missingBorderColor
+        + QStringLiteral("; color: ") + theme.missingTextColor
+        + QStringLiteral("; }")
+        + QStringLiteral("QToolButton[missingItem=\"true\"]:hover { background: ") + theme.missingBg
+        + QStringLiteral("; border-color: ") + theme.missingBorderColor
+        + QStringLiteral("; color: ") + theme.missingTextColor
+        + QStringLiteral("; }"));
 }
 
 void BoxPopup::buildUi()
@@ -1661,7 +2063,7 @@ void BoxPopup::buildUi()
     panel->setObjectName(QStringLiteral("popupPanel"));
     auto *shadow = new QGraphicsDropShadowEffect(panel);
     shadow->setBlurRadius(28);
-    shadow->setColor(QColor(15, 23, 42, 72));
+    shadow->setColor(uiThemeById(m_app->themeId()).shadowColor);
     shadow->setOffset(0, 9);
     panel->setGraphicsEffect(shadow);
     root->addWidget(panel);
@@ -1772,8 +2174,11 @@ void BoxPopup::buildItemButton(int index)
     if (occupied) {
         const LaunchItem item = box()->items.at(index);
         const bool pathExists = QFileInfo::exists(item.path);
-        button->setIcon(iconForPath(item.path));
+        button->setIcon(iconForItemPath(item.path, pathExists));
         button->setText(elide(item.name, 14));
+        button->setProperty("missingItem", !pathExists);
+        button->style()->unpolish(button);
+        button->style()->polish(button);
         button->setToolTip(pathExists
             ? item.path
             : QStringLiteral("%1\n项目不存在，可能已被移动或删除。").arg(item.path));

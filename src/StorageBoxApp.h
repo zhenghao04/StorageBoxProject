@@ -68,6 +68,9 @@ public:
     void launchApp(const LaunchItem &item, QWidget *parent);
     void setAlwaysOnTop(bool enabled);
     bool alwaysOnTop() const;
+    void showSettings(QWidget *parent);
+    void setThemeId(const QString &themeId);
+    QString themeId() const;
     void openConfigFolder(QWidget *parent) const;
     bool startAtLogin() const;
     bool setStartAtLogin(bool enabled, QWidget *parent);
@@ -76,9 +79,10 @@ public:
 private:
     void load();
     void ensureDefaults();
-    void renderBoxes();
+    void renderBoxes(bool persist = true);
     void refreshViews(Box *box = nullptr);
     void setupTray();
+    void closePopupNow(bool animated);
     QString configFilePath() const;
     QString configBackupFilePath() const;
     QString iconStorageDirPath() const;
@@ -97,6 +101,8 @@ private:
     QPointer<BoxPopup> m_popup;
     QSystemTrayIcon *m_tray = nullptr;
     bool m_alwaysOnTop = false;
+    bool m_configNeedsSave = false;
+    QString m_themeId;
 };
 
 class BoxWindow : public QWidget
@@ -159,6 +165,8 @@ public:
     BoxPopup(StorageBoxApp *app, BoxWindow *boxWindow);
     Box *box() const;
     void refresh();
+    void showAnimated();
+    void closeAnimated();
     void startItemDrag(int index, QWidget *source);
     bool handleDropOnSlot(int targetIndex, const QMimeData *mimeData);
 
@@ -181,4 +189,5 @@ private:
     QLabel *m_iconLabel = nullptr;
     QLabel *m_titleLabel = nullptr;
     QLabel *m_countLabel = nullptr;
+    bool m_closing = false;
 };

@@ -53,6 +53,8 @@ Before handing off a behavioral change, run the build and at least smoke-test:
 - Dragging files, folders, documents, shortcuts, and apps into a box works.
 - Reordering items in the panel works.
 - Custom box color and image icon persist after restart.
+- Interface theme changes persist after restart.
+- Missing item targets show the warning visual state.
 - Non-topmost mode does not cover normal apps; topmost mode intentionally does.
 
 See `docs/TEST_PLAN.md` for the fuller plan.

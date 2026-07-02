@@ -21,6 +21,7 @@ Stop-Process -Name StorageBoxLauncher -Force -ErrorAction SilentlyContinue
 - Confirm at least one box appears.
 - Confirm the tray icon appears and the process remains running after all windows are closed.
 - Confirm `StorageBoxLauncher.exe` file properties include version/product metadata after a Release build.
+- Confirm boxes appear promptly on startup before any delayed config save work is noticeable.
 
 ## P0 Core Launcher Behavior
 
@@ -96,5 +97,15 @@ powershell -ExecutionPolicy Bypass -File tools\package_release.ps1 -Version 0.1.
 
 - Use `.lnk` shortcuts, `.url` shortcuts, batch files, Office files, PDFs, images, and directories.
 - Delete or move a stored target and confirm the app shows a clear error when clicked.
+- Delete or move a stored target and confirm its grid button turns into the missing-item visual state with a warning badge.
 - Delete or move a custom image icon source; the copied icon under app data should still work.
 - Test high-DPI scaling at 125%, 150%, and mixed monitor setups.
+
+## P2 Theme And Settings Checks
+
+- Open `设置...` from the tray menu.
+- Open `界面设置...` from the box `外观` menu.
+- Switch between `清透浅色`, `深色玻璃`, `暖砂柔光`, and `极简白`; confirm the popup and box chrome update immediately.
+- Restart the app and confirm the selected interface theme persists.
+- Confirm the settings panel can toggle `置顶显示` and `开机自启动`.
+- Open and close the 3x3 panel several times; confirm the fade/scale animation feels quick and does not leave ghost windows.
