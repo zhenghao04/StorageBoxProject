@@ -12,7 +12,7 @@
 StorageBoxLauncher-v0.1.1-win64.zip
 ```
 
-说明：`main` 分支包含 v0.1.1 之后的开发改动。正式可下载版本以 GitHub Releases 页面为准。
+说明：正式可下载版本以 GitHub Releases 页面为准。`main` 分支可能包含下一个版本的开发改动。
 
 解压后直接运行：
 
@@ -27,20 +27,24 @@ StorageBoxLauncher.exe
 - 左键点击盒子展开圆角 3x3 项目面板
 - 点击面板里的项目会用 Windows 默认方式打开
 - 拖动盒子改变位置，拖动盒子边缘/角落调整大小，并自动保存
-- 右键盒子可添加文件/应用、添加文件夹、重命名、调整外观、新建盒子、删除盒子、切换置顶和退出
+- 右键盒子可添加文件/应用、添加文件夹、重命名、调整外观、新建盒子、删除盒子、切换置顶、开机自启动和退出
+- 托盘菜单支持新建盒子、切换置顶、开机自启动、打开配置文件夹和退出
 - 支持为每个盒子切换主题色，或选择本地图片作为盒子图标
 - 默认不置顶，Windows 下会作为普通非置顶窗口，打开其他应用时不会浮在最上层遮挡
 - 九宫格会自动读取 `.exe`、`.lnk`、`.url`、文件夹和文档等项目的系统图标
 - 支持把桌面或资源管理器里的文件、文件夹、文档、快捷方式直接拖到盒子/九宫格里添加
 - 支持在九宫格内拖动项目调整顺序
-- 配置保存到 Qt 的 `AppDataLocation`，通常位于 `%APPDATA%\StorageBoxProject\Storage Box Launcher\config.json`
+- 配置带 schema 版本，保存到 Qt 的 `AppDataLocation`，通常位于 `%APPDATA%\StorageBoxProject\Storage Box Launcher\config.json`
+- 覆盖配置前会保存 `config.backup.json`；配置损坏时会保留 `config.invalid.<timestamp>.json` 并恢复默认配置
 - 自带应用图标，已接入窗口、托盘、快捷方式和 Windows exe 资源
+- Windows exe 属性包含产品名、版本号、原始文件名等发布元数据
 
 ## 文档
 
 - 维护者/Agent 说明：[AGENTS.md](AGENTS.md)
 - 测试计划：[docs/TEST_PLAN.md](docs/TEST_PLAN.md)
 - 调试指南：[docs/DEBUGGING.md](docs/DEBUGGING.md)
+- 发布检查清单：[docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md)
 - 质量缺口和后续优先级：[docs/QUALITY_GAPS.md](docs/QUALITY_GAPS.md)
 - Release notes：[docs](docs)
 
@@ -69,18 +73,16 @@ cmake --build build --config Release
 如需把 Qt 运行时 DLL 复制到 Release 目录，执行：
 
 ```powershell
-& "C:\Users\Lenovo\Qt\6.8.3\msvc2022_64\bin\windeployqt.exe" ".\build\Release\StorageBoxLauncher.exe"
+& "C:\Qt\6.8.3\msvc2022_64\bin\windeployqt.exe" ".\build\Release\StorageBoxLauncher.exe" --no-translations
 ```
 
 ## 开机启动
 
-如需开机自启动，把 `StorageBoxLauncher.exe` 的快捷方式放到：
+推荐在托盘菜单或盒子右键菜单中勾选 `开机自启动`。程序会在当前用户的启动目录中创建或删除快捷方式：
 
 ```text
 %APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup
 ```
-
-删除快捷方式即可取消开机启动。
 
 ## 打包发布
 
@@ -90,10 +92,23 @@ cmake --build build --config Release
 powershell -ExecutionPolicy Bypass -File tools\package_release.ps1 -Version 0.1.1
 ```
 
-产物位于：
+默认包会裁剪 Qt 翻译文件、软件 OpenGL 运行库、网络/TLS 运行库，并生成 zip 的 SHA256 校验文件：
 
 ```text
 dist\StorageBoxLauncher-v0.1.1-win64.zip
+dist\StorageBoxLauncher-v0.1.1-win64.zip.sha256
+```
+
+如果要做最大兼容包，可以显式保留这些运行库：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\package_release.ps1 -Version 0.1.1 -IncludeSoftwareOpenGL -KeepNetworkRuntime -IncludeTranslations
+```
+
+如果有代码签名证书，可以在打包时签名主程序：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\package_release.ps1 -Version 0.1.1 -Sign -CertificateThumbprint "<证书指纹>"
 ```
 
 ## CI 检查

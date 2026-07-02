@@ -20,6 +20,7 @@ Stop-Process -Name StorageBoxLauncher -Force -ErrorAction SilentlyContinue
 - Launch `build\Release\StorageBoxLauncher.exe`.
 - Confirm at least one box appears.
 - Confirm the tray icon appears and the process remains running after all windows are closed.
+- Confirm `StorageBoxLauncher.exe` file properties include version/product metadata after a Release build.
 
 ## P0 Core Launcher Behavior
 
@@ -46,6 +47,22 @@ Stop-Process -Name StorageBoxLauncher -Force -ErrorAction SilentlyContinue
 %APPDATA%\StorageBoxProject\Storage Box Launcher\config.json
 ```
 
+- Confirm `schemaVersion` is present in `config.json`.
+- Confirm `config.backup.json` is created after a second save.
+- Temporarily corrupt `config.json`, launch the app, and confirm a `config.invalid.<timestamp>.json` copy is kept while the app restores a default box.
+
+## P0 Startup And Maintenance
+
+- Use the tray menu to enable `开机自启动`; confirm this shortcut is created:
+
+```text
+%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\Storage Box Launcher.lnk
+```
+
+- Disable `开机自启动`; confirm the shortcut is removed.
+- Use the box right-click menu to toggle `开机自启动` and repeat the shortcut check.
+- Use `打开配置文件夹` from the tray menu and box menu; confirm the app data folder opens.
+
 ## P1 Window Layering
 
 - Default non-topmost mode: open another app over the desktop; boxes should not stay above it.
@@ -70,6 +87,10 @@ powershell -ExecutionPolicy Bypass -File tools\package_release.ps1 -Version 0.1.
 - Extract the generated zip under `dist/`.
 - Run `StorageBoxLauncher.exe` from the extracted folder on a clean Windows user profile if possible.
 - Confirm Qt/MSVC runtime DLLs are included.
+- Confirm `README.txt` displays Chinese correctly in Notepad.
+- Confirm the `.zip.sha256` file is generated.
+- Confirm the default package does not include `opengl32sw.dll`, `translations`, `Qt6Network.dll`, `networkinformation`, or `tls`.
+- Build a compatibility package with `-IncludeSoftwareOpenGL -KeepNetworkRuntime -IncludeTranslations` and confirm those runtime files are retained.
 
 ## P2 Exploratory Checks
 

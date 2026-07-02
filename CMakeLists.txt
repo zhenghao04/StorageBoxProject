@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(StorageBoxLauncher VERSION 0.1.0 LANGUAGES CXX)
+project(StorageBoxLauncher VERSION 0.1.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -18,7 +18,12 @@ set(APP_SOURCES
 )
 
 if (WIN32)
-    list(APPEND APP_SOURCES app.rc)
+    configure_file(
+        ${CMAKE_CURRENT_SOURCE_DIR}/app.rc.in
+        ${CMAKE_CURRENT_BINARY_DIR}/app.rc
+        @ONLY
+    )
+    list(APPEND APP_SOURCES ${CMAKE_CURRENT_BINARY_DIR}/app.rc)
 endif()
 
 add_executable(StorageBoxLauncher WIN32
@@ -26,6 +31,10 @@ add_executable(StorageBoxLauncher WIN32
 )
 
 target_link_libraries(StorageBoxLauncher PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)
+
+target_compile_definitions(StorageBoxLauncher PRIVATE
+    STORAGEBOX_VERSION="${PROJECT_VERSION}"
+)
 
 if (MSVC)
     target_compile_options(StorageBoxLauncher PRIVATE /utf-8)

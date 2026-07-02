@@ -25,6 +25,7 @@
 #include <QImage>
 #include <QInputDialog>
 #include <QJsonDocument>
+#include <QJsonParseError>
 #include <QLabel>
 #include <QLineEdit>
 #include <QLinearGradient>
@@ -36,6 +37,7 @@
 #include <QPixmap>
 #include <QPushButton>
 #include <QRandomGenerator>
+#include <QSaveFile>
 #include <QSize>
 #include <QSizePolicy>
 #include <QStandardPaths>
@@ -60,6 +62,7 @@ constexpr int kMaxBoxSize = 180;
 constexpr int kResizeGrip = 7;
 constexpr int kCellWidth = 116;
 constexpr int kCellHeight = 78;
+constexpr int kConfigSchemaVersion = 2;
 constexpr const char *kItemIndexMime = "application/x-storagebox-item-index";
 constexpr const char *kBoxIdMime = "application/x-storagebox-id";
 
@@ -352,18 +355,40 @@ void StorageBoxApp::start()
 
 void StorageBoxApp::load()
 {
+    m_boxes.clear();
+    m_alwaysOnTop = false;
+
     QFile file(configFilePath());
     if (!file.open(QIODevice::ReadOnly)) {
         ensureDefaults();
         return;
     }
 
-    const QJsonDocument document = QJsonDocument::fromJson(file.readAll());
+    QJsonParseError parseError;
+    const QJsonDocument document = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+        backupConfigFile(QStringLiteral("invalid"));
+        QFile::remove(configFilePath());
+        QMessageBox::warning(
+            nullptr,
+            QStringLiteral("配置已恢复"),
+            QStringLiteral("配置文件无法读取，已保留备份并使用默认配置。"));
+        ensureDefaults();
+        return;
+    }
+
     const QJsonObject root = document.object();
+    const int schemaVersion = root.value(QStringLiteral("schemaVersion")).toInt(1);
+    if (schemaVersion > kConfigSchemaVersion) {
+        QMessageBox::warning(
+            nullptr,
+            QStringLiteral("配置版本较新"),
+            QStringLiteral("当前程序版本较旧，会尽量读取现有配置。建议先备份配置文件。"));
+    }
+
     m_alwaysOnTop = root.value(QStringLiteral("alwaysOnTop")).toBool(false);
 
     const QJsonArray boxes = root.value(QStringLiteral("boxes")).toArray();
-    m_boxes.clear();
     for (int i = 0; i < boxes.size(); ++i) {
         const QJsonObject object = boxes.at(i).toObject();
         if (!object.isEmpty()) {
@@ -394,6 +419,8 @@ void StorageBoxApp::ensureDefaults()
 void StorageBoxApp::save()
 {
     QJsonObject root;
+    root.insert(QStringLiteral("schemaVersion"), kConfigSchemaVersion);
+    root.insert(QStringLiteral("savedAtUtc"), QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
     root.insert(QStringLiteral("alwaysOnTop"), m_alwaysOnTop);
 
     QJsonArray boxes;
@@ -405,11 +432,14 @@ void StorageBoxApp::save()
     QFileInfo info(configFilePath());
     QDir().mkpath(info.absolutePath());
 
-    QFile file(info.absoluteFilePath());
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    backupConfigFile(QStringLiteral("latest"));
+
+    QSaveFile file(info.absoluteFilePath());
+    if (!file.open(QIODevice::WriteOnly)) {
         return;
     }
     file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+    file.commit();
 }
 
 void StorageBoxApp::renderBoxes()
@@ -464,6 +494,21 @@ void StorageBoxApp::setupTray()
     topmost->setChecked(m_alwaysOnTop);
     connect(topmost, &QAction::toggled, this, &StorageBoxApp::setAlwaysOnTop);
 
+    QAction *startup = menu->addAction(QStringLiteral("开机自启动"));
+    startup->setCheckable(true);
+    startup->setChecked(startAtLogin());
+    connect(startup, &QAction::toggled, this, [this, startup](bool enabled) {
+        if (!setStartAtLogin(enabled, nullptr)) {
+            const bool wasBlocked = startup->blockSignals(true);
+            startup->setChecked(startAtLogin());
+            startup->blockSignals(wasBlocked);
+        }
+    });
+
+    menu->addAction(QStringLiteral("打开配置文件夹"), this, [this] {
+        openConfigFolder(nullptr);
+    });
+
     menu->addSeparator();
     menu->addAction(QStringLiteral("退出"), qApp, &QApplication::quit);
     m_tray->setContextMenu(menu);
@@ -477,10 +522,49 @@ QString StorageBoxApp::configFilePath() const
     return QDir(base).filePath(QStringLiteral("config.json"));
 }
 
+QString StorageBoxApp::configBackupFilePath() const
+{
+    const QFileInfo configInfo(configFilePath());
+    return QDir(configInfo.absolutePath()).filePath(QStringLiteral("config.backup.json"));
+}
+
 QString StorageBoxApp::iconStorageDirPath() const
 {
     const QFileInfo configInfo(configFilePath());
     return QDir(configInfo.absolutePath()).filePath(QStringLiteral("Icons"));
+}
+
+QString StorageBoxApp::startupShortcutPath() const
+{
+#ifdef Q_OS_WIN
+    const QString appData = qEnvironmentVariable("APPDATA");
+    if (appData.isEmpty()) {
+        return {};
+    }
+    return QDir(appData).filePath(QStringLiteral("Microsoft/Windows/Start Menu/Programs/Startup/Storage Box Launcher.lnk"));
+#else
+    return {};
+#endif
+}
+
+void StorageBoxApp::backupConfigFile(const QString &label) const
+{
+    const QFileInfo configInfo(configFilePath());
+    if (!configInfo.exists() || configInfo.size() <= 0) {
+        return;
+    }
+
+    QDir().mkpath(configInfo.absolutePath());
+    QString targetPath = configBackupFilePath();
+    if (label != QStringLiteral("latest")) {
+        const QString safeLabel = label.simplified().replace(QLatin1Char(' '), QLatin1Char('-'));
+        const QString timestamp = QDateTime::currentDateTimeUtc().toString(QStringLiteral("yyyyMMdd-HHmmss"));
+        targetPath = QDir(configInfo.absolutePath()).filePath(
+            QStringLiteral("config.%1.%2.json").arg(safeLabel.isEmpty() ? QStringLiteral("backup") : safeLabel, timestamp));
+    }
+
+    QFile::remove(targetPath);
+    QFile::copy(configInfo.absoluteFilePath(), targetPath);
 }
 
 QString StorageBoxApp::copyIconToStorage(const QString &sourcePath, const QString &boxId) const
@@ -867,6 +951,53 @@ bool StorageBoxApp::alwaysOnTop() const
     return m_alwaysOnTop;
 }
 
+void StorageBoxApp::openConfigFolder(QWidget *parent) const
+{
+    const QFileInfo configInfo(configFilePath());
+    QDir().mkpath(configInfo.absolutePath());
+    if (!QDesktopServices::openUrl(QUrl::fromLocalFile(configInfo.absolutePath()))) {
+        QMessageBox::warning(parent, QStringLiteral("打开失败"), QStringLiteral("无法打开配置文件夹：\n%1").arg(configInfo.absolutePath()));
+    }
+}
+
+bool StorageBoxApp::startAtLogin() const
+{
+    const QString shortcutPath = startupShortcutPath();
+    return !shortcutPath.isEmpty() && QFileInfo::exists(shortcutPath);
+}
+
+bool StorageBoxApp::setStartAtLogin(bool enabled, QWidget *parent)
+{
+#ifdef Q_OS_WIN
+    const QString shortcutPath = startupShortcutPath();
+    if (shortcutPath.isEmpty()) {
+        QMessageBox::warning(parent, QStringLiteral("设置失败"), QStringLiteral("无法定位 Windows 启动目录。"));
+        return false;
+    }
+
+    if (enabled) {
+        const QFileInfo shortcutInfo(shortcutPath);
+        QDir().mkpath(shortcutInfo.absolutePath());
+        QFile::remove(shortcutPath);
+        if (!QFile::link(QApplication::applicationFilePath(), shortcutPath)) {
+            QMessageBox::warning(parent, QStringLiteral("设置失败"), QStringLiteral("无法创建开机启动快捷方式：\n%1").arg(shortcutPath));
+            return false;
+        }
+        return true;
+    }
+
+    if (QFileInfo::exists(shortcutPath) && !QFile::remove(shortcutPath)) {
+        QMessageBox::warning(parent, QStringLiteral("设置失败"), QStringLiteral("无法删除开机启动快捷方式：\n%1").arg(shortcutPath));
+        return false;
+    }
+    return true;
+#else
+    Q_UNUSED(enabled);
+    QMessageBox::information(parent, QStringLiteral("暂不支持"), QStringLiteral("开机自启动设置目前只支持 Windows。"));
+    return false;
+#endif
+}
+
 int StorageBoxApp::boxIndex(Box *box) const
 {
     for (int i = 0; i < m_boxes.size(); ++i) {
@@ -1113,6 +1244,21 @@ void BoxWindow::contextMenuEvent(QContextMenuEvent *event)
     topmost->setCheckable(true);
     topmost->setChecked(m_app->alwaysOnTop());
     connect(topmost, &QAction::toggled, m_app, &StorageBoxApp::setAlwaysOnTop);
+
+    QAction *startup = menu.addAction(QStringLiteral("开机自启动"));
+    startup->setCheckable(true);
+    startup->setChecked(m_app->startAtLogin());
+    connect(startup, &QAction::toggled, this, [this, startup](bool enabled) {
+        if (!m_app->setStartAtLogin(enabled, this)) {
+            const bool wasBlocked = startup->blockSignals(true);
+            startup->setChecked(m_app->startAtLogin());
+            startup->blockSignals(wasBlocked);
+        }
+    });
+
+    menu.addAction(QStringLiteral("打开配置文件夹"), this, [this] {
+        m_app->openConfigFolder(this);
+    });
 
     menu.addAction(QStringLiteral("新建盒子"), m_app, &StorageBoxApp::addBox);
     menu.addAction(QStringLiteral("删除这个盒子"), this, [this] { m_app->deleteBox(m_box, this); });
@@ -1625,9 +1771,12 @@ void BoxPopup::buildItemButton(int index)
 
     if (occupied) {
         const LaunchItem item = box()->items.at(index);
+        const bool pathExists = QFileInfo::exists(item.path);
         button->setIcon(iconForPath(item.path));
         button->setText(elide(item.name, 14));
-        button->setToolTip(item.path);
+        button->setToolTip(pathExists
+            ? item.path
+            : QStringLiteral("%1\n项目不存在，可能已被移动或删除。").arg(item.path));
         connect(button, &QToolButton::clicked, this, [this, item] { m_app->launchApp(item, this); });
         button->setContextMenuPolicy(Qt::CustomContextMenu);
         connect(button, &QToolButton::customContextMenuRequested, this, [this, button, index](const QPoint &pos) {

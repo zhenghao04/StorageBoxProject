@@ -36,6 +36,14 @@ Configuration is stored at:
 %APPDATA%\StorageBoxProject\Storage Box Launcher\config.json
 ```
 
+The app writes a recent backup before overwriting config:
+
+```text
+%APPDATA%\StorageBoxProject\Storage Box Launcher\config.backup.json
+```
+
+If `config.json` cannot be parsed, the app keeps a timestamped copy named like `config.invalid.20260702-120000.json` and starts from defaults.
+
 Custom box images are copied to:
 
 ```text
@@ -76,11 +84,13 @@ Get-Process StorageBoxLauncher -ErrorAction SilentlyContinue
 
 ### Startup Shortcut Issues
 
-The app itself does not yet manage startup shortcuts through UI. Manual startup lives under:
+The tray menu and box context menu manage startup shortcuts for the current Windows user. The shortcut lives under:
 
 ```text
-%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup
+%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\Storage Box Launcher.lnk
 ```
+
+If toggling startup fails, check whether the app is running from a writable local path and whether security software is blocking `.lnk` creation in the Startup folder.
 
 ## Useful Inspection Commands
 

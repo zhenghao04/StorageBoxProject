@@ -68,6 +68,9 @@ public:
     void launchApp(const LaunchItem &item, QWidget *parent);
     void setAlwaysOnTop(bool enabled);
     bool alwaysOnTop() const;
+    void openConfigFolder(QWidget *parent) const;
+    bool startAtLogin() const;
+    bool setStartAtLogin(bool enabled, QWidget *parent);
     int boxIndex(Box *box) const;
 
 private:
@@ -77,7 +80,10 @@ private:
     void refreshViews(Box *box = nullptr);
     void setupTray();
     QString configFilePath() const;
+    QString configBackupFilePath() const;
     QString iconStorageDirPath() const;
+    QString startupShortcutPath() const;
+    void backupConfigFile(const QString &label) const;
     QString copyIconToStorage(const QString &sourcePath, const QString &boxId) const;
     QColor colorForIndex(int index) const;
     QString defaultNameForPath(const QString &path) const;

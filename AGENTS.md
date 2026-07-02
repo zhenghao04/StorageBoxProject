@@ -8,6 +8,7 @@ This repository contains a Windows desktop launcher built with C++17 and Qt Widg
 - Main application/UI logic: `src/StorageBoxApp.cpp`
 - Public app/window declarations: `src/StorageBoxApp.h`
 - Qt resources and app icon: `assets/`
+- Windows version resource template: `app.rc.in`
 - Release packaging script: `tools/package_release.ps1`
 - Portable user note copied into release zips: `packaging/README_PORTABLE.md`
 
@@ -55,3 +56,5 @@ Before handing off a behavioral change, run the build and at least smoke-test:
 - Non-topmost mode does not cover normal apps; topmost mode intentionally does.
 
 See `docs/TEST_PLAN.md` for the fuller plan.
+
+For release packaging, signing, checksum, and runtime-trimming expectations, see `docs/RELEASE_CHECKLIST.md`.
