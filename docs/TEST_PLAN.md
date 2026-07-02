@@ -22,6 +22,7 @@ Stop-Process -Name StorageBoxLauncher -Force -ErrorAction SilentlyContinue
 - Confirm the tray icon appears and the process remains running after all windows are closed.
 - Confirm `StorageBoxLauncher.exe` file properties include version/product metadata after a Release build.
 - Confirm boxes appear promptly on startup before any delayed config save work is noticeable.
+- Press `Win+D` and confirm visible boxes restore immediately instead of staying minimized.
 
 ## P0 Core Launcher Behavior
 

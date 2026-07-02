@@ -261,6 +261,29 @@ void restoreWidgetLayer(QWidget *widget)
 #endif
 }
 
+void restoreWidgetAfterShowDesktop(QWidget *widget, bool alwaysOnTop)
+{
+    if (!widget) {
+        return;
+    }
+
+#ifdef Q_OS_WIN
+    const HWND hwnd = reinterpret_cast<HWND>(widget->winId());
+    ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+    SetWindowPos(
+        hwnd,
+        alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST,
+        0,
+        0,
+        0,
+        0,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
+#else
+    widget->setWindowState(widget->windowState() & ~Qt::WindowMinimized);
+    widget->show();
+#endif
+}
+
 QString elide(const QString &text, int maxChars)
 {
     if (text.size() <= maxChars) {
@@ -1442,6 +1465,18 @@ bool BoxWindow::event(QEvent *event)
     return QWidget::event(event);
 }
 
+void BoxWindow::changeEvent(QEvent *event)
+{
+    QWidget::changeEvent(event);
+    if (event->type() != QEvent::WindowStateChange || !isMinimized()) {
+        return;
+    }
+
+    QTimer::singleShot(0, this, [this] {
+        restoreWidgetAfterShowDesktop(this, m_app->alwaysOnTop());
+    });
+}
+
 void BoxWindow::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() != Qt::LeftButton) {
@@ -1942,6 +1977,18 @@ void BoxPopup::startItemDrag(int index, QWidget *source)
     }
 
     drag->exec(Qt::MoveAction);
+}
+
+void BoxPopup::changeEvent(QEvent *event)
+{
+    QWidget::changeEvent(event);
+    if (m_closing || event->type() != QEvent::WindowStateChange || !isMinimized()) {
+        return;
+    }
+
+    QTimer::singleShot(0, this, [this] {
+        restoreWidgetAfterShowDesktop(this, m_app->alwaysOnTop());
+    });
 }
 
 bool BoxPopup::handleDropOnSlot(int targetIndex, const QMimeData *mimeData)
