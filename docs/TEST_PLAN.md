@@ -82,7 +82,7 @@ Stop-Process -Name StorageBoxLauncher -Force -ErrorAction SilentlyContinue
 ## P1 Packaging Smoke
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools\package_release.ps1 -Version 0.1.2
+powershell -ExecutionPolicy Bypass -File tools\package_release.ps1 -Version 1.0.2
 ```
 
 - Extract the generated zip under `dist/`.

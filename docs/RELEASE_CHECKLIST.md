@@ -11,7 +11,7 @@ Use this checklist before publishing a GitHub Release zip.
 ## Build And Package
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools\package_release.ps1 -Version 0.1.1
+powershell -ExecutionPolicy Bypass -File tools\package_release.ps1 -Version 1.0.2
 ```
 
 The default package trims:
@@ -23,7 +23,7 @@ The default package trims:
 Use a compatibility package when older machines need the broader Qt runtime:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools\package_release.ps1 -Version 0.1.1 -IncludeSoftwareOpenGL -KeepNetworkRuntime -IncludeTranslations
+powershell -ExecutionPolicy Bypass -File tools\package_release.ps1 -Version 1.0.2 -IncludeSoftwareOpenGL -KeepNetworkRuntime -IncludeTranslations
 ```
 
 ## Code Signing
@@ -31,7 +31,7 @@ powershell -ExecutionPolicy Bypass -File tools\package_release.ps1 -Version 0.1.
 When a signing certificate is available:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools\package_release.ps1 -Version 0.1.1 -Sign -CertificateThumbprint "<thumbprint>"
+powershell -ExecutionPolicy Bypass -File tools\package_release.ps1 -Version 1.0.2 -Sign -CertificateThumbprint "<thumbprint>"
 ```
 
 You can also set:
@@ -44,7 +44,7 @@ $env:SIGNTOOL_EXE="C:\Path\To\signtool.exe"
 Verify after packaging:
 
 ```powershell
-Get-AuthenticodeSignature dist\StorageBoxLauncher-v0.1.1-win64\StorageBoxLauncher.exe
+Get-AuthenticodeSignature dist\StorageBoxLauncher-v1.0.2-win64\StorageBoxLauncher.exe
 ```
 
 ## Checksums
@@ -52,7 +52,7 @@ Get-AuthenticodeSignature dist\StorageBoxLauncher-v0.1.1-win64\StorageBoxLaunche
 The packaging script writes:
 
 ```text
-dist\StorageBoxLauncher-v0.1.1-win64.zip.sha256
+dist\StorageBoxLauncher-v1.0.2-win64.zip.sha256
 ```
 
 Attach both the `.zip` and `.zip.sha256` files to the GitHub Release.

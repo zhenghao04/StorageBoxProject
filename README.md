@@ -9,7 +9,7 @@
 普通用户不需要安装 Qt 或编译源码。到 GitHub Releases 下载：
 
 ```text
-StorageBoxLauncher-v0.1.1-win64.zip
+StorageBoxLauncher-v1.0.2-win64.zip
 ```
 
 说明：正式可下载版本以 GitHub Releases 页面为准。`main` 分支可能包含下一个版本的开发改动。
@@ -93,26 +93,26 @@ cmake --build build --config Release
 生成可直接分发的 Windows 便携包：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools\package_release.ps1 -Version 0.1.1
+powershell -ExecutionPolicy Bypass -File tools\package_release.ps1 -Version 1.0.2
 ```
 
 默认包会裁剪 Qt 翻译文件、软件 OpenGL 运行库、网络/TLS 运行库，并生成 zip 的 SHA256 校验文件：
 
 ```text
-dist\StorageBoxLauncher-v0.1.1-win64.zip
-dist\StorageBoxLauncher-v0.1.1-win64.zip.sha256
+dist\StorageBoxLauncher-v1.0.2-win64.zip
+dist\StorageBoxLauncher-v1.0.2-win64.zip.sha256
 ```
 
 如果要做最大兼容包，可以显式保留这些运行库：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools\package_release.ps1 -Version 0.1.1 -IncludeSoftwareOpenGL -KeepNetworkRuntime -IncludeTranslations
+powershell -ExecutionPolicy Bypass -File tools\package_release.ps1 -Version 1.0.2 -IncludeSoftwareOpenGL -KeepNetworkRuntime -IncludeTranslations
 ```
 
 如果有代码签名证书，可以在打包时签名主程序：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools\package_release.ps1 -Version 0.1.1 -Sign -CertificateThumbprint "<证书指纹>"
+powershell -ExecutionPolicy Bypass -File tools\package_release.ps1 -Version 1.0.2 -Sign -CertificateThumbprint "<证书指纹>"
 ```
 
 ## CI 检查
