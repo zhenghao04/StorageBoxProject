@@ -67,6 +67,8 @@ public:
     void moveApp(Box *box, int sourceIndex, int targetIndex);
     void launchApp(const LaunchItem &item, QWidget *parent);
     void setAlwaysOnTop(bool enabled);
+    void showAllBoxes();
+    void hideAllBoxes();
     bool alwaysOnTop() const;
     int boxIndex(Box *box) const;
 
@@ -76,11 +78,13 @@ private:
     void renderBoxes();
     void refreshViews(Box *box = nullptr);
     void setupTray();
+    bool eventFilter(QObject *watched, QEvent *event) override;
     QString configFilePath() const;
     QString iconStorageDirPath() const;
     QString copyIconToStorage(const QString &sourcePath, const QString &boxId) const;
     QColor colorForIndex(int index) const;
     QString defaultNameForPath(const QString &path) const;
+    bool hasItemPath(const Box *box, const QString &path) const;
     QJsonObject itemToJson(const LaunchItem &item) const;
     QJsonObject boxToJson(const Box &box) const;
     LaunchItem itemFromJson(const QJsonObject &json) const;
@@ -91,6 +95,7 @@ private:
     QPointer<BoxPopup> m_popup;
     QSystemTrayIcon *m_tray = nullptr;
     bool m_alwaysOnTop = false;
+    QString m_startupWarning;
 };
 
 class BoxWindow : public QWidget
@@ -155,6 +160,7 @@ public:
     void refresh();
     void startItemDrag(int index, QWidget *source);
     bool handleDropOnSlot(int targetIndex, const QMimeData *mimeData);
+    bool isFor(const BoxWindow *window) const;
 
 protected:
     void dragEnterEvent(QDragEnterEvent *event) override;
