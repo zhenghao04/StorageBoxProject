@@ -565,6 +565,9 @@ bool StorageBoxApp::eventFilter(QObject *watched, QEvent *event)
 
     if (event->type() == QEvent::MouseButtonPress && !QApplication::activePopupWidget()) {
         QWidget *widget = qobject_cast<QWidget *>(watched);
+        if (!widget) {
+            return QObject::eventFilter(watched, event);
+        }
         const bool insidePopup = widget && (widget == m_popup || m_popup->isAncestorOf(widget));
         const bool onSourceBox = m_popup->isFor(qobject_cast<BoxWindow *>(widget));
         if (!insidePopup && !onSourceBox) {
