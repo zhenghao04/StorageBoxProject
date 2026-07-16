@@ -8,6 +8,8 @@ This file tracks known gaps and recommended implementation order. It is intentio
 - `AGENTS.md` documents build, handoff, and regression expectations.
 - `docs/TEST_PLAN.md` defines the current manual regression plan.
 - `docs/DEBUGGING.md` documents common local failures and recovery steps.
+- Configuration writes are atomic, include a schema version, and preserve unreadable files as timestamped backups.
+- Duplicate paths are rejected consistently, missing targets are marked in the panel, and tray actions can show or hide every box.
 
 ## P0 Gaps
 
@@ -19,7 +21,6 @@ This file tracks known gaps and recommended implementation order. It is intentio
 ## P1 Gaps
 
 - `StorageBoxApp.cpp` owns app state, Windows integration, painting, popup UI, drag/drop, and persistence. Splitting storage, window helpers, and item model logic would make testing easier.
-- Config schema has no explicit version or migration path.
 - Error reporting is message-box based and not logged. A small log file under app data would help user support.
 - Window layering has known Windows shell edge cases around Win+D, touchpad show-desktop gestures, games, and virtual desktops.
 - Startup behavior is documented but not managed in app settings.
@@ -34,7 +35,6 @@ This file tracks known gaps and recommended implementation order. It is intentio
 ## Recommended Next Steps
 
 1. Extract pure data logic into testable helpers and add CTest-based unit tests.
-2. Add config schema versioning.
-3. Make `tools/package_release.ps1` accept environment-driven Qt/MSVC paths and document CI-safe packaging.
-4. Add optional app-managed startup toggle.
-5. Revisit show-desktop behavior behind an explicit compatibility setting, not as the default window mode.
+2. Make `tools/package_release.ps1` accept environment-driven Qt/MSVC paths and document CI-safe packaging.
+3. Add optional app-managed startup toggle.
+4. Revisit show-desktop behavior behind an explicit compatibility setting, not as the default window mode.

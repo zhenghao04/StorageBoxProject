@@ -18,6 +18,7 @@
 #include <QFileInfo>
 #include <QFont>
 #include <QFrame>
+#include <QGuiApplication>
 #include <QGraphicsDropShadowEffect>
 #include <QGridLayout>
 #include <QHBoxLayout>
@@ -25,6 +26,8 @@
 #include <QImage>
 #include <QInputDialog>
 #include <QJsonDocument>
+#include <QJsonParseError>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
 #include <QLinearGradient>
@@ -36,6 +39,8 @@
 #include <QPixmap>
 #include <QPushButton>
 #include <QRandomGenerator>
+#include <QSaveFile>
+#include <QScreen>
 #include <QSize>
 #include <QSizePolicy>
 #include <QStandardPaths>
@@ -100,6 +105,50 @@ QStringList localFilesFromMime(const QMimeData *mimeData)
         }
     }
     return paths;
+}
+
+QString comparablePath(const QString &path)
+{
+    const QFileInfo info(path);
+    const QString canonical = info.canonicalFilePath();
+    const QString normalized = canonical.isEmpty() ? info.absoluteFilePath() : canonical;
+    return QDir::cleanPath(QDir::toNativeSeparators(normalized));
+}
+
+QScreen *screenForRect(const QRect &rect)
+{
+    QScreen *screen = QGuiApplication::screenAt(rect.center());
+    return screen ? screen : QGuiApplication::primaryScreen();
+}
+
+QPoint clampWindowPosition(const QPoint &position, const QSize &size)
+{
+    QScreen *screen = screenForRect(QRect(position, size));
+    if (!screen) {
+        return position;
+    }
+
+    const QRect area = screen->availableGeometry();
+    const int maxX = qMax(area.left(), area.right() - size.width() + 1);
+    const int maxY = qMax(area.top(), area.bottom() - size.height() + 1);
+    return QPoint(qBound(area.left(), position.x(), maxX), qBound(area.top(), position.y(), maxY));
+}
+
+QPoint popupPositionForBox(const Box &box, const QSize &popupSize)
+{
+    const QRect anchor(box.position, box.size);
+    QScreen *screen = screenForRect(anchor);
+    if (!screen) {
+        return anchor.bottomLeft() + QPoint(0, 8);
+    }
+
+    const QRect area = screen->availableGeometry();
+    const int belowY = anchor.bottom() + 8;
+    const int aboveY = anchor.top() - popupSize.height() - 8;
+    const int y = belowY + popupSize.height() <= area.bottom() + 1 || aboveY < area.top() ? belowY : aboveY;
+    const int maxX = qMax(area.left(), area.right() - popupSize.width() + 1);
+    const int maxY = qMax(area.top(), area.bottom() - popupSize.height() + 1);
+    return QPoint(qBound(area.left(), anchor.left(), maxX), qBound(area.top(), y, maxY));
 }
 
 class SlotButton : public QToolButton
@@ -335,10 +384,12 @@ QPixmap boxPreviewPixmap(const Box *box, const QSize &targetSize)
 StorageBoxApp::StorageBoxApp(QObject *parent)
     : QObject(parent)
 {
+    qApp->installEventFilter(this);
 }
 
 StorageBoxApp::~StorageBoxApp()
 {
+    qApp->removeEventFilter(this);
     closePopup();
     qDeleteAll(m_windows);
 }
@@ -348,6 +399,11 @@ void StorageBoxApp::start()
     load();
     setupTray();
     renderBoxes();
+    if (!m_startupWarning.isEmpty()) {
+        QTimer::singleShot(0, this, [this] {
+            QMessageBox::warning(nullptr, QStringLiteral("Storage Box Launcher"), m_startupWarning);
+        });
+    }
 }
 
 void StorageBoxApp::load()
@@ -358,7 +414,22 @@ void StorageBoxApp::load()
         return;
     }
 
-    const QJsonDocument document = QJsonDocument::fromJson(file.readAll());
+    const QByteArray raw = file.readAll();
+    file.close();
+    QJsonParseError parseError;
+    const QJsonDocument document = QJsonDocument::fromJson(raw, &parseError);
+    if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+        const QString backupPath = configFilePath()
+            + QStringLiteral(".corrupt-%1.json").arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-hhmmss")));
+        if (QFile::copy(configFilePath(), backupPath)) {
+            m_startupWarning = QStringLiteral("配置文件无法读取，已保留副本：\n%1\n\n已创建默认收纳盒。").arg(backupPath);
+        } else {
+            m_startupWarning = QStringLiteral("配置文件无法读取，已创建默认收纳盒。");
+        }
+        m_boxes.clear();
+        ensureDefaults();
+        return;
+    }
     const QJsonObject root = document.object();
     m_alwaysOnTop = root.value(QStringLiteral("alwaysOnTop")).toBool(false);
 
@@ -394,6 +465,7 @@ void StorageBoxApp::ensureDefaults()
 void StorageBoxApp::save()
 {
     QJsonObject root;
+    root.insert(QStringLiteral("schemaVersion"), 1);
     root.insert(QStringLiteral("alwaysOnTop"), m_alwaysOnTop);
 
     QJsonArray boxes;
@@ -405,11 +477,15 @@ void StorageBoxApp::save()
     QFileInfo info(configFilePath());
     QDir().mkpath(info.absolutePath());
 
-    QFile file(info.absoluteFilePath());
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    QSaveFile file(info.absoluteFilePath());
+    if (!file.open(QIODevice::WriteOnly)) {
         return;
     }
-    file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+    if (file.write(QJsonDocument(root).toJson(QJsonDocument::Indented)) < 0) {
+        file.cancelWriting();
+        return;
+    }
+    file.commit();
 }
 
 void StorageBoxApp::renderBoxes()
@@ -457,6 +533,8 @@ void StorageBoxApp::setupTray()
     m_tray = new QSystemTrayIcon(QApplication::windowIcon(), this);
     auto *menu = new QMenu;
     menu->addAction(QStringLiteral("新建盒子"), this, &StorageBoxApp::addBox);
+    menu->addAction(QStringLiteral("显示全部盒子"), this, &StorageBoxApp::showAllBoxes);
+    menu->addAction(QStringLiteral("隐藏全部盒子"), this, &StorageBoxApp::hideAllBoxes);
     menu->addSeparator();
 
     QAction *topmost = menu->addAction(QStringLiteral("置顶显示"));
@@ -469,6 +547,35 @@ void StorageBoxApp::setupTray()
     m_tray->setContextMenu(menu);
     m_tray->setToolTip(QStringLiteral("Storage Box Launcher"));
     m_tray->show();
+}
+
+bool StorageBoxApp::eventFilter(QObject *watched, QEvent *event)
+{
+    if (!m_popup || !m_popup->isVisible()) {
+        return QObject::eventFilter(watched, event);
+    }
+
+    if (event->type() == QEvent::KeyPress) {
+        const auto *keyEvent = static_cast<QKeyEvent *>(event);
+        if (keyEvent->key() == Qt::Key_Escape && !QApplication::activePopupWidget()) {
+            closePopup();
+            return true;
+        }
+    }
+
+    if (event->type() == QEvent::MouseButtonPress && !QApplication::activePopupWidget()) {
+        QWidget *widget = qobject_cast<QWidget *>(watched);
+        if (!widget) {
+            return QObject::eventFilter(watched, event);
+        }
+        const bool insidePopup = widget && (widget == m_popup || m_popup->isAncestorOf(widget));
+        const bool onSourceBox = m_popup->isFor(qobject_cast<BoxWindow *>(widget));
+        if (!insidePopup && !onSourceBox) {
+            closePopup();
+        }
+    }
+
+    return QObject::eventFilter(watched, event);
 }
 
 QString StorageBoxApp::configFilePath() const
@@ -685,6 +792,10 @@ void StorageBoxApp::addApp(Box *box, QWidget *parent)
     if (path.isEmpty()) {
         return;
     }
+    if (hasItemPath(box, path)) {
+        QMessageBox::information(parent, QStringLiteral("项目已存在"), QStringLiteral("这个项目已经在当前收纳盒中。"));
+        return;
+    }
 
     bool ok = false;
     const QString defaultName = defaultNameForPath(path);
@@ -716,6 +827,10 @@ void StorageBoxApp::addFolder(Box *box, QWidget *parent)
         QString(),
         QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
     if (path.isEmpty()) {
+        return;
+    }
+    if (hasItemPath(box, path)) {
+        QMessageBox::information(parent, QStringLiteral("项目已存在"), QStringLiteral("这个项目已经在当前收纳盒中。"));
         return;
     }
 
@@ -785,14 +900,7 @@ void StorageBoxApp::addDroppedPaths(Box *box, const QStringList &paths, int inse
             break;
         }
 
-        bool exists = false;
-        for (const LaunchItem &item : qAsConst(box->items)) {
-            if (QString::compare(item.path, path, Qt::CaseInsensitive) == 0) {
-                exists = true;
-                break;
-            }
-        }
-        if (exists) {
+        if (hasItemPath(box, path)) {
             continue;
         }
 
@@ -867,6 +975,24 @@ bool StorageBoxApp::alwaysOnTop() const
     return m_alwaysOnTop;
 }
 
+void StorageBoxApp::showAllBoxes()
+{
+    for (BoxWindow *window : qAsConst(m_windows)) {
+        window->show();
+        if (!m_alwaysOnTop) {
+            QTimer::singleShot(0, window, [window] { ensureWidgetNonTopmost(window); });
+        }
+    }
+}
+
+void StorageBoxApp::hideAllBoxes()
+{
+    closePopup();
+    for (BoxWindow *window : qAsConst(m_windows)) {
+        window->hide();
+    }
+}
+
 int StorageBoxApp::boxIndex(Box *box) const
 {
     for (int i = 0; i < m_boxes.size(); ++i) {
@@ -890,6 +1016,21 @@ QString StorageBoxApp::defaultNameForPath(const QString &path) const
         return info.fileName().isEmpty() ? path : info.fileName();
     }
     return info.completeBaseName().isEmpty() ? info.fileName() : info.completeBaseName();
+}
+
+bool StorageBoxApp::hasItemPath(const Box *box, const QString &path) const
+{
+    if (!box || path.isEmpty()) {
+        return false;
+    }
+
+    const QString candidate = comparablePath(path);
+    for (const LaunchItem &item : box->items) {
+        if (QString::compare(comparablePath(item.path), candidate, Qt::CaseInsensitive) == 0) {
+            return true;
+        }
+    }
+    return false;
 }
 
 QJsonObject StorageBoxApp::itemToJson(const LaunchItem &item) const
@@ -966,6 +1107,7 @@ BoxWindow::BoxWindow(StorageBoxApp *app, Box *box)
     setCursor(Qt::PointingHandCursor);
     setToolTip(QStringLiteral("左键打开，拖动移动，拖边缩放，右键管理，双击添加文件/应用；可拖入文件、文件夹或文档"));
     applyWindowFlags();
+    m_box->position = clampWindowPosition(m_box->position, m_box->size);
     move(m_box->position);
 }
 
@@ -978,6 +1120,7 @@ void BoxWindow::refresh()
 {
     applyWindowFlags();
     resize(m_box->size);
+    m_box->position = clampWindowPosition(m_box->position, m_box->size);
     move(m_box->position);
     update();
     show();
@@ -1044,7 +1187,7 @@ void BoxWindow::mouseMoveEvent(QMouseEvent *event)
     }
 
     if (m_dragRegion == HitRegion::Move || m_dragRegion == HitRegion::None) {
-        const QPoint next(qMax(0, m_startPosition.x() + delta.x()), qMax(0, m_startPosition.y() + delta.y()));
+        const QPoint next = clampWindowPosition(m_startPosition + delta, size());
         move(next);
         m_box->position = next;
     } else {
@@ -1257,7 +1400,7 @@ void BoxWindow::applyResize(const QPoint &delta)
         break;
     }
 
-    next.moveTopLeft(QPoint(qMax(0, next.x()), qMax(0, next.y())));
+    next.moveTopLeft(clampWindowPosition(next.topLeft(), next.size()));
     setGeometry(next);
     m_box->position = next.topLeft();
     m_box->size = next.size();
@@ -1382,7 +1525,7 @@ BoxPopup::BoxPopup(StorageBoxApp *app, BoxWindow *boxWindow)
     setWindowIcon(QApplication::windowIcon());
     setAcceptDrops(true);
     applyWindowFlags();
-    move(box()->position + QPoint(0, box()->size.height() + 8));
+    move(popupPositionForBox(*box(), size()));
     buildUi();
 }
 
@@ -1394,7 +1537,7 @@ Box *BoxPopup::box() const
 void BoxPopup::refresh()
 {
     applyWindowFlags();
-    move(box()->position + QPoint(0, box()->size.height() + 8));
+    move(popupPositionForBox(*box(), size()));
     updateHeader();
     rebuildGrid();
     update();
@@ -1404,6 +1547,11 @@ void BoxPopup::refresh()
     } else {
         restoreWidgetLayer(this);
     }
+}
+
+bool BoxPopup::isFor(const BoxWindow *window) const
+{
+    return window && window == m_boxWindow;
 }
 
 void BoxPopup::startItemDrag(int index, QWidget *source)
@@ -1625,9 +1773,13 @@ void BoxPopup::buildItemButton(int index)
 
     if (occupied) {
         const LaunchItem item = box()->items.at(index);
-        button->setIcon(iconForPath(item.path));
+        const bool missing = !QFileInfo::exists(item.path);
+        button->setIcon(missing ? style()->standardIcon(QStyle::SP_MessageBoxWarning) : iconForPath(item.path));
         button->setText(elide(item.name, 14));
-        button->setToolTip(item.path);
+        button->setToolTip(missing ? QStringLiteral("路径不存在：\n%1").arg(item.path) : item.path);
+        if (missing) {
+            button->setObjectName(QStringLiteral("missingItem"));
+        }
         connect(button, &QToolButton::clicked, this, [this, item] { m_app->launchApp(item, this); });
         button->setContextMenuPolicy(Qt::CustomContextMenu);
         connect(button, &QToolButton::customContextMenuRequested, this, [this, button, index](const QPoint &pos) {
